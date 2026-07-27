@@ -47,6 +47,10 @@ stays free of DMCA-problematic audio.
   OpenWave's own UI. Effects are applied before the monitor/stream split,
   so both mixes hear the processed signal.
 - **Per-channel, per-mix volume and mute**, with optional fader linking.
+- **Channel colors**: mark each input with a color (Microphone green,
+  Browser rose, …) via the color bar above the input selector — and
+  right-click it to bind a pad on an RGB pad controller that lights up in
+  that color, so the right fader is always easy to find.
 - **Optional VOD Mix**: a third bus (“Virtual VOD Mix”) for a second OBS
   audio track, so music can play live but stay out of the VOD/recording.
 - **Master volume and mute** for every mix, plus live level meters
@@ -166,8 +170,11 @@ layer, and a per-channel layer for its faders. Pads bound to mutes and
 profiles light up to mirror the current state (the lit/dark velocities
 are configurable, which selects the color on many pad controllers), and
 *fader pickup* keeps a fader inert after a profile switch until it
-crosses the current level. Everything is stored per controller name, so
-bindings survive replugging.
+crosses the current level. On RGB pad controllers (APC mini mk2,
+Launchpads, …), right-click a channel's color bar to bind a *color pad*:
+it lights up in the channel's color as a locator next to that channel's
+hardware fader. Everything is stored per controller name, so bindings
+survive replugging.
 
 ### Scripting via D-Bus
 

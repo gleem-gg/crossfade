@@ -150,6 +150,7 @@ fn handle(
                 "channels": cfg.channels.iter().map(|c| serde_json::json!({
                     "id": c.id,
                     "name": c.name,
+                    "color": c.color,
                     "monitor": mix_state(c.monitor_volume, c.monitor_muted),
                     "stream": mix_state(c.stream_volume, c.stream_muted),
                     "vod": mix_state(c.vod_volume, c.vod_muted),

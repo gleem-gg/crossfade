@@ -22,6 +22,11 @@ const CSS: &str = r#"
 .channel-strip scale.fader {
     min-height: 200px;
 }
+/* The channel color button: a slim chip, not a full-height button. */
+.channel-strip .color-chip {
+    min-height: 0;
+    padding: 2px 4px;
+}
 levelbar.meter block {
     min-height: 5px;
     border-radius: 3px;

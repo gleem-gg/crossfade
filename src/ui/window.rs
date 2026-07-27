@@ -596,6 +596,8 @@ fn handle_midi_input(app: &Rc<App>, source: MidiSource, value: u8) {
                 perform(app, ControlAction::SelectMidiProfile { id: profile });
             }
         }
+        // Color pads are pure locator LEDs; pressing one does nothing.
+        MidiTarget::ChannelColor { .. } => {}
     }
 }
 
@@ -697,6 +699,11 @@ fn learn_capture(app: &Rc<App>, source: MidiSource) {
         if volume && source.kind == MidiKind::Note {
             return;
         }
+        // Color pads are pure LEDs and only note pads can be lit, so ignore
+        // CC input while one is being learned.
+        if matches!(req.target, MidiTarget::ChannelColor { .. }) && source.kind != MidiKind::Note {
+            return;
+        }
     }
     let Some(req) = app.midi_learn.borrow_mut().take() else {
         return;
@@ -738,7 +745,7 @@ fn refresh_leds(app: &Rc<App>) {
                 if b.source.kind != MidiKind::Note {
                     continue;
                 }
-                let lit = match b.target {
+                let vel = match b.target {
                     MidiTarget::ChannelMute { id, mix } => {
                         if mix == Mix::Vod && !cfg.vod_mix_enabled {
                             continue;
@@ -746,28 +753,43 @@ fn refresh_leds(app: &Rc<App>) {
                         let Some(c) = cfg.channel(id) else {
                             continue;
                         };
-                        match mix {
+                        let lit = match mix {
                             Mix::Monitor => c.monitor_muted,
                             Mix::Stream => c.stream_muted,
                             Mix::Vod => c.vod_muted,
-                        }
+                        };
+                        if lit { on } else { off }
                     }
                     MidiTarget::MasterMute { mix } => {
                         if mix == Mix::Vod && !cfg.vod_mix_enabled {
                             continue;
                         }
-                        match mix {
+                        let lit = match mix {
                             Mix::Monitor => cfg.master.monitor_muted,
                             Mix::Stream => cfg.master.stream_muted,
                             Mix::Vod => cfg.master.vod_muted,
+                        };
+                        if lit { on } else { off }
+                    }
+                    MidiTarget::SelectProfile { profile } => {
+                        if profile == cfg.midi.active_profile { on } else { off }
+                    }
+                    // Color pads glow in the channel's color (nearest entry
+                    // of the pad palette); dark while the channel has none.
+                    MidiTarget::ChannelColor { id } => {
+                        let Some(c) = cfg.channel(id) else {
+                            continue;
+                        };
+                        match c.color_rgb() {
+                            Some((r, g, b)) => crate::midi::color_velocity(r, g, b),
+                            None => off,
                         }
                     }
-                    MidiTarget::SelectProfile { profile } => profile == cfg.midi.active_profile,
                     _ => continue,
                 };
                 desired.insert(
                     (b.source.device.clone(), b.source.channel, b.source.number),
-                    if lit { on } else { off },
+                    vel,
                 );
             }
         }
@@ -1027,13 +1049,30 @@ fn rebuild_add_menu(app: &Rc<App>) {
 }
 
 fn wire_strip(app: &Rc<App>, strip: &ChannelStrip, id: u64) {
-    // Right-click on any fader or mute binds a MIDI control to it.
+    // Right-click on any fader or mute binds a MIDI control to it; on the
+    // color button it binds a pad that lights up in the channel's color.
+    attach_learn(app, &strip.color, MidiTarget::ChannelColor { id });
     attach_learn(app, &strip.monitor_scale, MidiTarget::ChannelVolume { id, mix: Mix::Monitor });
     attach_learn(app, &strip.stream_scale, MidiTarget::ChannelVolume { id, mix: Mix::Stream });
     attach_learn(app, &strip.vod_scale, MidiTarget::ChannelVolume { id, mix: Mix::Vod });
     attach_learn(app, &strip.monitor_mute, MidiTarget::ChannelMute { id, mix: Mix::Monitor });
     attach_learn(app, &strip.stream_mute, MidiTarget::ChannelMute { id, mix: Mix::Stream });
     attach_learn(app, &strip.vod_mute, MidiTarget::ChannelMute { id, mix: Mix::Vod });
+
+    {
+        let app = app.clone();
+        strip.connect_color_changed(move |hex| {
+            {
+                let mut cfg = app.config.borrow_mut();
+                let Some(ch) = cfg.channel_mut(id) else {
+                    return;
+                };
+                ch.color = hex;
+            }
+            schedule_save(&app);
+            refresh_leds(&app);
+        });
+    }
 
     {
         let app = app.clone();

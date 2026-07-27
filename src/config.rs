@@ -104,6 +104,10 @@ pub struct ChannelConfig {
     /// Links all of the channel's faders (including the VOD fader while the
     /// VOD mix is enabled).
     pub linked: bool,
+    /// Accent color ("#rrggbb") marking the channel: shown on the strip's
+    /// color button and on any MIDI pad bound as the channel's color pad.
+    /// `None` = no color assigned.
+    pub color: Option<String>,
     /// Built-in channels (Microphone, System) that cannot be removed.
     pub permanent: bool,
     /// LV2 effect chain applied to this channel's input before it reaches
@@ -129,6 +133,7 @@ impl Default for ChannelConfig {
             stream_muted: false,
             vod_muted: false,
             linked: false,
+            color: None,
             permanent: false,
             effects: Vec::new(),
             next_effect_id: 1,
@@ -138,6 +143,16 @@ impl Default for ChannelConfig {
 }
 
 impl ChannelConfig {
+    /// The channel color as 8-bit RGB components.
+    pub fn color_rgb(&self) -> Option<(u8, u8, u8)> {
+        let hex = self.color.as_deref()?.strip_prefix('#')?;
+        if hex.len() != 6 {
+            return None;
+        }
+        let n = u32::from_str_radix(hex, 16).ok()?;
+        Some(((n >> 16) as u8, (n >> 8) as u8, n as u8))
+    }
+
     /// Effects that should actually be instantiated in the chain.
     pub fn enabled_effects(&self) -> Vec<&EffectConfig> {
         self.effects.iter().filter(|e| e.enabled).collect()
@@ -265,6 +280,9 @@ impl MidiSource {
 pub enum MidiTarget {
     ChannelVolume { id: u64, mix: crate::audio::Mix },
     ChannelMute { id: u64, mix: crate::audio::Mix },
+    /// A pad lit in the channel's color, as a locator on the controller;
+    /// pressing it does nothing.
+    ChannelColor { id: u64 },
     MasterVolume { mix: crate::audio::Mix },
     MasterMute { mix: crate::audio::Mix },
     /// Switches the active binding profile (by stable profile id). Stored
@@ -400,7 +418,9 @@ impl MidiConfig {
         let refers = |t: &MidiTarget| {
             matches!(
                 t,
-                MidiTarget::ChannelVolume { id, .. } | MidiTarget::ChannelMute { id, .. }
+                MidiTarget::ChannelVolume { id, .. }
+                    | MidiTarget::ChannelMute { id, .. }
+                    | MidiTarget::ChannelColor { id }
                     if *id == channel_id
             )
         };
@@ -494,6 +514,10 @@ impl Config {
             ch.monitor_volume = ch.monitor_volume.clamp(0.0, 1.0);
             ch.stream_volume = ch.stream_volume.clamp(0.0, 1.0);
             ch.vod_volume = ch.vod_volume.clamp(0.0, 1.0);
+            // Hand-edited colors that are not "#rrggbb" are dropped.
+            if ch.color.is_some() && ch.color_rgb().is_none() {
+                ch.color = None;
+            }
             // Repair effect/VST ids the same way as channel ids (they share
             // one id space per channel).
             let mut seen_fx: HashSet<u64> = HashSet::new();
@@ -548,9 +572,9 @@ impl Config {
         }
         let channel_ids: HashSet<u64> = cfg.channels.iter().map(|c| c.id).collect();
         let valid = |t: &MidiTarget| match t {
-            MidiTarget::ChannelVolume { id, .. } | MidiTarget::ChannelMute { id, .. } => {
-                channel_ids.contains(id)
-            }
+            MidiTarget::ChannelVolume { id, .. }
+            | MidiTarget::ChannelMute { id, .. }
+            | MidiTarget::ChannelColor { id } => channel_ids.contains(id),
             MidiTarget::SelectProfile { profile } => seen_p.contains(profile),
             MidiTarget::MasterVolume { .. } | MidiTarget::MasterMute { .. } => true,
         };

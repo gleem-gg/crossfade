@@ -32,6 +32,7 @@ pub fn target_description(cfg: &Config, target: &MidiTarget) -> String {
             format!("{} — {} volume", channel(id), mix.label())
         }
         MidiTarget::ChannelMute { id, mix } => format!("{} — {} mute", channel(id), mix.label()),
+        MidiTarget::ChannelColor { id } => format!("{} — color pad", channel(id)),
         MidiTarget::MasterVolume { mix } => format!("{} Mix master volume", mix.label()),
         MidiTarget::MasterMute { mix } => format!("{} Mix master mute", mix.label()),
         MidiTarget::SelectProfile { profile } => format!(

@@ -1,7 +1,9 @@
 use std::cell::{Cell, RefCell};
+use std::f64::consts::PI;
 use std::rc::Rc;
 
 use adw::prelude::*;
+use gtk::{gdk, gio};
 
 use crate::config::{Assignment, ChannelConfig};
 
@@ -12,6 +14,24 @@ pub const STRIP_WIDTH: i32 = 150;
 /// Wider strip while the third (VOD) fader is shown.
 const STRIP_WIDTH_VOD: i32 = 200;
 
+/// Slot for the handler invoked with a newly picked channel color
+/// ("#rrggbb"; `None` = color removed).
+type ColorHandler = Rc<RefCell<Option<Rc<dyn Fn(Option<String>)>>>>;
+
+/// Preset channel colors offered in the picker popover (GNOME palette hues).
+const PRESET_COLORS: [(&str, &str); 10] = [
+    ("Blue", "#3584e4"),
+    ("Teal", "#2190a4"),
+    ("Green", "#2ec27e"),
+    ("Yellow", "#f5c211"),
+    ("Orange", "#ff7800"),
+    ("Red", "#e01b24"),
+    ("Rose", "#f66fa8"),
+    ("Purple", "#9141ac"),
+    ("Brown", "#986a44"),
+    ("Slate", "#6f8396"),
+];
+
 /// One vertical input strip: rename label, input selector, level meter and
 /// independent per-mix faders (monitor, stream, and — when the VOD mix is
 /// enabled — VOD) with per-mix mute buttons and a single link toggle that
@@ -21,6 +41,12 @@ pub struct ChannelStrip {
     pub name: gtk::EditableLabel,
     pub remove: gtk::Button,
     pub fx: gtk::Button,
+    /// Color-bar button opening the channel color picker; also the
+    /// right-click anchor for binding a color pad on a MIDI controller.
+    pub color: gtk::MenuButton,
+    color_swatch: gtk::DrawingArea,
+    color_value: Rc<RefCell<Option<gdk::RGBA>>>,
+    color_changed: ColorHandler,
     pub input: gtk::DropDown,
     level: MeterPair,
     pub monitor_scale: gtk::Scale,
@@ -66,6 +92,33 @@ fn caption_label(text: &str) -> gtk::Label {
     label
 }
 
+fn pill_path(cr: &gtk::cairo::Context, x: f64, y: f64, w: f64, h: f64) {
+    let r = h / 2.0;
+    cr.new_sub_path();
+    cr.arc(x + w - r, y + r, r, -PI / 2.0, PI / 2.0);
+    cr.arc(x + r, y + r, r, PI / 2.0, 1.5 * PI);
+    cr.close_path();
+}
+
+/// Round color swatch for the picker popover.
+fn swatch_button(rgba: gdk::RGBA, tooltip: &str) -> gtk::Button {
+    let area = gtk::DrawingArea::new();
+    area.set_content_width(18);
+    area.set_content_height(18);
+    area.set_draw_func(move |_, cr, w, h| {
+        let (w, h) = (w as f64, h as f64);
+        cr.arc(w / 2.0, h / 2.0, w.min(h) / 2.0, 0.0, 2.0 * PI);
+        cr.set_source_rgb(rgba.red() as f64, rgba.green() as f64, rgba.blue() as f64);
+        let _ = cr.fill();
+    });
+    let btn = gtk::Button::builder()
+        .child(&area)
+        .tooltip_text(tooltip)
+        .build();
+    btn.add_css_class("flat");
+    btn
+}
+
 impl ChannelStrip {
     pub fn new() -> Self {
         let root = gtk::Box::builder()
@@ -104,6 +157,125 @@ impl ChannelStrip {
         header.append(&name);
         header.append(&fx);
         header.append(&remove);
+
+        // ---- Channel color: a color-bar button opening a swatch popover ----
+        let color_value: Rc<RefCell<Option<gdk::RGBA>>> = Rc::new(RefCell::new(None));
+        let color_changed: ColorHandler = Rc::new(RefCell::new(None));
+
+        let color_swatch = gtk::DrawingArea::new();
+        color_swatch.set_content_height(12);
+        color_swatch.set_hexpand(true);
+        // Center it so the chip keeps exactly this height instead of being
+        // stretched to the button's allocation.
+        color_swatch.set_valign(gtk::Align::Center);
+        {
+            let value = color_value.clone();
+            color_swatch.set_draw_func(move |area, cr, w, h| {
+                let (w, h) = (w as f64, h as f64);
+                if let Some(c) = &*value.borrow() {
+                    pill_path(cr, 0.0, 0.0, w, h);
+                    cr.set_source_rgb(c.red() as f64, c.green() as f64, c.blue() as f64);
+                    let _ = cr.fill();
+                } else {
+                    // Unset: a dashed outline in the theme foreground color.
+                    let fg = area.color();
+                    pill_path(cr, 0.5, 0.5, w - 1.0, h - 1.0);
+                    cr.set_source_rgba(fg.red() as f64, fg.green() as f64, fg.blue() as f64, 0.4);
+                    cr.set_line_width(1.0);
+                    cr.set_dash(&[3.0, 3.0], 0.0);
+                    let _ = cr.stroke();
+                }
+            });
+        }
+
+        let popover = gtk::Popover::new();
+        let color = gtk::MenuButton::builder()
+            .tooltip_text("Channel color")
+            .popover(&popover)
+            .build();
+        color.add_css_class("flat");
+        color.add_css_class("color-chip");
+        color.set_child(Some(&color_swatch));
+
+        // Applies a pick: updates the swatch and notifies the handler.
+        let choose: Rc<dyn Fn(Option<gdk::RGBA>)> = {
+            let value = color_value.clone();
+            let swatch = color_swatch.clone();
+            let changed = color_changed.clone();
+            let popover = popover.clone();
+            Rc::new(move |c: Option<gdk::RGBA>| {
+                popover.popdown();
+                let hex = c.as_ref().map(|c| {
+                    format!(
+                        "#{:02x}{:02x}{:02x}",
+                        (c.red() * 255.0).round() as u8,
+                        (c.green() * 255.0).round() as u8,
+                        (c.blue() * 255.0).round() as u8
+                    )
+                });
+                *value.borrow_mut() = c;
+                swatch.queue_draw();
+                let changed = changed.borrow().clone();
+                if let Some(changed) = changed {
+                    changed(hex);
+                }
+            })
+        };
+
+        let grid = gtk::Grid::builder().row_spacing(2).column_spacing(2).build();
+        for (i, (label, hex)) in PRESET_COLORS.iter().enumerate() {
+            let rgba = gdk::RGBA::parse(*hex).expect("valid preset color");
+            let btn = swatch_button(rgba, label);
+            let choose = choose.clone();
+            btn.connect_clicked(move |_| choose(Some(rgba)));
+            grid.attach(&btn, (i % 5) as i32, (i / 5) as i32, 1, 1);
+        }
+
+        let custom = gtk::Button::with_label("Custom…");
+        custom.add_css_class("flat");
+        {
+            let choose = choose.clone();
+            let value = color_value.clone();
+            let popover = popover.clone();
+            custom.connect_clicked(move |btn| {
+                popover.popdown();
+                let dialog = gtk::ColorDialog::builder()
+                    .title("Channel Color")
+                    .with_alpha(false)
+                    .build();
+                let initial = value.borrow().unwrap_or_else(|| {
+                    gdk::RGBA::parse(PRESET_COLORS[0].1).expect("valid preset color")
+                });
+                let root = btn.root().and_downcast::<gtk::Window>();
+                let choose = choose.clone();
+                dialog.choose_rgba(
+                    root.as_ref(),
+                    Some(&initial),
+                    gio::Cancellable::NONE,
+                    move |res| {
+                        if let Ok(c) = res {
+                            choose(Some(c));
+                        }
+                    },
+                );
+            });
+        }
+
+        let none = gtk::Button::with_label("No Color");
+        none.add_css_class("flat");
+        {
+            let choose = choose.clone();
+            none.connect_clicked(move |_| choose(None));
+        }
+
+        let actions = gtk::Box::new(gtk::Orientation::Horizontal, 2);
+        actions.set_homogeneous(true);
+        actions.append(&custom);
+        actions.append(&none);
+        let pop_box = gtk::Box::new(gtk::Orientation::Vertical, 6);
+        pop_box.append(&grid);
+        pop_box.append(&actions);
+        popover.set_child(Some(&pop_box));
 
         let input = gtk::DropDown::builder()
             .tooltip_text("Select the input for this channel")
@@ -164,6 +336,7 @@ impl ChannelStrip {
         faders.append(&captions_row);
 
         root.append(&header);
+        root.append(&color);
         root.append(&input);
         root.append(&level.root);
         root.append(&faders);
@@ -173,6 +346,10 @@ impl ChannelStrip {
             name,
             remove,
             fx,
+            color,
+            color_swatch,
+            color_value,
+            color_changed,
             input,
             level,
             monitor_scale,
@@ -195,11 +372,24 @@ impl ChannelStrip {
         self.level.set_levels(values);
     }
 
+    /// Register the handler invoked when the user picks a channel color
+    /// (`None` = color removed).
+    pub fn connect_color_changed(&self, f: impl Fn(Option<String>) + 'static) {
+        *self.color_changed.borrow_mut() = Some(Rc::new(f));
+    }
+
+    /// Show a color without invoking the change handler.
+    fn set_color(&self, hex: Option<&str>) {
+        *self.color_value.borrow_mut() = hex.and_then(|h| gdk::RGBA::parse(h).ok());
+        self.color_swatch.queue_draw();
+    }
+
     /// Push the current config values into the widgets without firing the
     /// user-edit handlers.
     pub fn load_config(&self, c: &ChannelConfig) {
         self.guard.set(true);
         self.name.set_text(&c.name);
+        self.set_color(c.color.as_deref());
         self.monitor_scale.set_value(c.monitor_volume);
         self.stream_scale.set_value(c.stream_volume);
         self.vod_scale.set_value(c.vod_volume);
