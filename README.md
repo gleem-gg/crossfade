@@ -99,7 +99,7 @@ Optional, for effects:
 ### Fedora (COPR)
 
 ```sh
-sudo dnf copr enable ghost0/crossfade
+sudo dnf copr enable gleem/crossfade
 sudo dnf install gleem-crossfade
 ```
 
