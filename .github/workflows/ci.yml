@@ -1,0 +1,61 @@
+name: CI
+
+# Gates every change before it reaches COPR. The `rpm` job is a dry run of
+# what COPR does on a push to main: generate the SRPM with the same
+# .copr/Makefile, then build it from the vendor tarball, so packaging
+# breakage (a missing BuildRequires, a spec typo, a vendoring failure)
+# shows up on the pull request instead of in the published repository.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Clippy and build
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install build dependencies
+        run: >
+          dnf -y install cargo rust clippy gcc gtk4-devel libadwaita-devel
+          pulseaudio-libs-devel alsa-lib-devel desktop-file-utils make
+          git-core
+
+      - uses: actions/checkout@v5
+
+      - name: Check
+        run: make check
+
+      - name: Build
+        run: cargo build --release --locked
+
+  rpm:
+    name: Package
+    runs-on: ubuntu-latest
+    container: fedora:latest
+    steps:
+      - name: Install packaging dependencies
+        run: dnf -y install 'dnf-command(builddep)' rpm-build make git-core
+
+      - uses: actions/checkout@v5
+        with:
+          # .copr/Makefile derives the release from `git rev-list --count`.
+          fetch-depth: 0
+
+      - name: Trust the checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Generate the SRPM
+        run: make -f .copr/Makefile srpm outdir="$PWD/srpm"
+
+      - name: Build the RPM
+        run: |
+          srpm=$(ls srpm/*.src.rpm)
+          dnf -y builddep "$srpm"
+          rpmbuild --rebuild "$srpm"
