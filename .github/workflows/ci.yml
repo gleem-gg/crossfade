@@ -27,7 +27,7 @@ jobs:
           pulseaudio-libs-devel alsa-lib-devel desktop-file-utils make
           git-core
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check
         run: make check
@@ -43,7 +43,7 @@ jobs:
       - name: Install packaging dependencies
         run: dnf -y install 'dnf-command(builddep)' rpm-build make git-core
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # .copr/Makefile derives the release from `git rev-list --count`.
           fetch-depth: 0

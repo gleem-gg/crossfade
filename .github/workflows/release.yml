@@ -23,7 +23,7 @@ jobs:
           pulseaudio-libs-devel alsa-lib-devel desktop-file-utils make
           git-core gh tar xz jq
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Check
         run: make check
