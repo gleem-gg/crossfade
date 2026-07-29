@@ -1,13 +1,13 @@
 [Desktop Entry]
 Type=Application
-Name=OpenWave
+Name=Gleem Crossfade
 GenericName=Audio Mixer
 Comment=Dual-mix virtual audio mixer for streaming
-Exec=openwave
-Icon=de.ghostzero.OpenWave
+Exec=gleem-crossfade
+Icon=gg.gleem.Crossfade
 Terminal=false
 Categories=AudioVideo;Audio;Mixer;GTK;
-Keywords=audio;mixer;stream;mix;pipewire;wavelink;monitor;
+Keywords=audio;mixer;stream;mix;pipewire;monitor;crossfade;
 StartupNotify=true
 SingleMainWindow=true
 X-GNOME-UsesNotifications=false

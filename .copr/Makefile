@@ -12,13 +12,13 @@ srpm:
 	version=$$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1); \
 	release=1.$$(git rev-list --count HEAD).g$$(git rev-parse --short HEAD); \
 	workdir=$$(mktemp -d); \
-	git archive --format=tar --prefix=openwave-$$version/ HEAD \
-	    | gzip > "$$workdir/openwave-$$version.tar.gz"; \
+	git archive --format=tar --prefix=gleem-crossfade-$$version/ HEAD \
+	    | gzip > "$$workdir/gleem-crossfade-$$version.tar.gz"; \
 	cargo vendor --locked "$$workdir/vendor" >/dev/null; \
-	tar -C "$$workdir" -cJf "$$workdir/openwave-$$version-vendor.tar.xz" vendor; \
+	tar -C "$$workdir" -cJf "$$workdir/gleem-crossfade-$$version-vendor.tar.xz" vendor; \
 	sed -e "s/^Version:.*/Version:        $$version/" \
 	    -e "s/^Release:.*/Release:        $$release%{?dist}/" \
-	    packaging/openwave.spec > "$$workdir/openwave.spec"; \
-	rpmbuild -bs "$$workdir/openwave.spec" \
+	    packaging/gleem-crossfade.spec > "$$workdir/gleem-crossfade.spec"; \
+	rpmbuild -bs "$$workdir/gleem-crossfade.spec" \
 	    --define "_sourcedir $$workdir" \
 	    --define "_srcrpmdir $(outdir)"

@@ -4,9 +4,9 @@
 //! Topology created on the server:
 //!
 //! ```text
-//!  capture source ──┬── module-loopback ──▶ OpenWave_Monitor ── loopback ──▶ headphones
-//!  (or app stream    ├── module-loopback ──▶ OpenWave_Stream  (captured by OBS/Discord)
-//!   moved into a     └── module-loopback ──▶ OpenWave_Vod     (optional third bus for a
+//!  capture source ──┬── module-loopback ──▶ Crossfade_Monitor ── loopback ──▶ headphones
+//!  (or app stream    ├── module-loopback ──▶ Crossfade_Stream  (captured by OBS/Discord)
+//!   moved into a     └── module-loopback ──▶ Crossfade_Vod     (optional third bus for a
 //!   per-channel                                                DMCA-safe VOD/recording track)
 //!   null sink)
 //! ```
@@ -35,12 +35,16 @@ use crate::config::{Assignment, ChannelConfig, Config, MasterConfig};
 use crate::fx::{self, FxEvent, FxManager};
 use crate::lv2;
 
-pub const MONITOR_SINK: &str = "OpenWave_Monitor";
-pub const STREAM_SINK: &str = "OpenWave_Stream";
-pub const STREAM_MIC: &str = "OpenWave_StreamMic";
-pub const VOD_SINK: &str = "OpenWave_Vod";
-pub const VOD_MIC: &str = "OpenWave_VodMic";
-const OWN_PREFIX: &str = "OpenWave_";
+pub const MONITOR_SINK: &str = "Crossfade_Monitor";
+pub const STREAM_SINK: &str = "Crossfade_Stream";
+pub const STREAM_MIC: &str = "Crossfade_StreamMic";
+pub const VOD_SINK: &str = "Crossfade_Vod";
+pub const VOD_MIC: &str = "Crossfade_VodMic";
+const OWN_PREFIX: &str = "Crossfade_";
+/// Pre-rename (OpenWave) server prefix, still reaped by the startup cleanup
+/// so leftovers from a crashed pre-0.8 session can't linger. Remove after a
+/// transition release or two.
+const LEGACY_PREFIX: &str = "OpenWave_";
 const LOOPBACK_ARGS: &str = "latency_msec=30";
 const INVALID_INDEX: u32 = u32::MAX;
 
@@ -393,10 +397,10 @@ impl PulseManager {
             return;
         };
         let mut proplist = Proplist::new().expect("proplist");
-        let _ = proplist.set_str(properties::APPLICATION_NAME, "OpenWave");
+        let _ = proplist.set_str(properties::APPLICATION_NAME, "Gleem Crossfade");
         let _ = proplist.set_str(properties::APPLICATION_ID, crate::APP_ID);
         let _ = proplist.set_str(properties::APPLICATION_ICON_NAME, "audio-card");
-        let Some(mut ctx) = Context::new_with_proplist(&ml, "OpenWave", &proplist) else {
+        let Some(mut ctx) = Context::new_with_proplist(&ml, "Gleem Crossfade", &proplist) else {
             Self::fail(rc, "Could not create the audio server context");
             return;
         };
@@ -450,7 +454,7 @@ impl PulseManager {
     }
 
     /// Bring the server state in line with `config.vod_mix_enabled`: create
-    /// or tear down the VOD bus, its "Virtual VOD Mix" capture device, its
+    /// or tear down the VOD bus, its "Crossfade VOD Mix" capture device, its
     /// master meter and every channel's send into it — without touching the
     /// monitor/stream wiring, so toggling the preference never interrupts
     /// audio.
@@ -591,7 +595,7 @@ impl PulseManager {
         self.inner.borrow().default_source.clone()
     }
 
-    /// Unlike `output_sinks`/`sources`, these also see OpenWave's own devices.
+    /// Unlike `output_sinks`/`sources`, these also see Crossfade's own devices.
     pub fn has_sink(&self, name: &str) -> bool {
         self.inner.borrow().sinks.iter().any(|(_, e)| e.name == name)
     }
@@ -762,7 +766,7 @@ impl PulseManager {
         Self::cleanup_leftovers(rc);
     }
 
-    /// Unload OpenWave modules left over from a crashed session, then create
+    /// Unload Crossfade modules left over from a crashed session, then create
     /// the virtual sinks fresh.
     fn cleanup_leftovers(rc: &Rc<RefCell<Inner>>) {
         let Some(intro) = Self::introspect(rc) else {
@@ -777,7 +781,7 @@ impl PulseManager {
                 if (name == "module-null-sink"
                     || name == "module-loopback"
                     || name == "module-remap-source")
-                    && arg.contains(OWN_PREFIX)
+                    && (arg.contains(OWN_PREFIX) || arg.contains(LEGACY_PREFIX))
                 {
                     found.borrow_mut().push(m.index);
                 }
@@ -821,14 +825,14 @@ impl PulseManager {
         let vod = rc.borrow().config.borrow().vod_mix_enabled;
         // The buses deliberately are NOT called "Virtual … Mix": they show up
         // in speaker lists, and the name users should look for — the
-        // "Virtual Stream Mix" microphone — belongs to the remap-source
+        // "Crossfade Stream Mix" microphone — belongs to the remap-source
         // created in `create_stream_mic`.
         let mut buses = vec![
-            (MONITOR_SINK, "OpenWave Monitor Bus", "audio-headphones"),
-            (STREAM_SINK, "OpenWave Stream Bus", "audio-input-microphone"),
+            (MONITOR_SINK, "Crossfade Monitor Bus", "audio-headphones"),
+            (STREAM_SINK, "Crossfade Stream Bus", "audio-input-microphone"),
         ];
         if vod {
-            buses.push((VOD_SINK, "OpenWave VOD Bus", "audio-input-microphone"));
+            buses.push((VOD_SINK, "Crossfade VOD Bus", "audio-input-microphone"));
         }
         let pending = Rc::new(Cell::new(buses.len()));
         for (name, desc, icon) in buses {
@@ -874,9 +878,9 @@ impl PulseManager {
         Self::monitor_out_defer_timeout(rc);
         Self::emit(rc, AudioEvent::Ready);
         let vod = rc.borrow().config.borrow().vod_mix_enabled;
-        Self::create_mix_mic(rc, STREAM_SINK, STREAM_MIC, "Virtual Stream Mix");
+        Self::create_mix_mic(rc, STREAM_SINK, STREAM_MIC, "Crossfade Stream Mix");
         if vod {
-            Self::create_mix_mic(rc, VOD_SINK, VOD_MIC, "Virtual VOD Mix");
+            Self::create_mix_mic(rc, VOD_SINK, VOD_MIC, "Crossfade VOD Mix");
         }
         let ids: Vec<u64> = {
             let inner = rc.borrow();
@@ -894,8 +898,8 @@ impl PulseManager {
         Self::schedule_refresh(rc);
     }
 
-    /// Expose a mix bus as a real capture device ("Virtual Stream Mix" /
-    /// "Virtual VOD Mix") so applications that hide monitor sources —
+    /// Expose a mix bus as a real capture device ("Crossfade Stream Mix" /
+    /// "Crossfade VOD Mix") so applications that hide monitor sources —
     /// Discord, most WebRTC apps — can select it as their microphone.
     fn create_mix_mic(rc: &Rc<RefCell<Inner>>, bus: &str, source_name: &str, desc: &str) {
         let Some(mut intro) = Self::introspect(rc) else {
@@ -1588,15 +1592,15 @@ impl PulseManager {
             }
             // App channels and standalone virtual channels both expose a
             // selectable device named after the channel; apps can be routed
-            // into it from OpenWave (App) or from the app's own output
+            // into it from Crossfade (App) or from the app's own output
             // device picker / OBS audio capture (both).
             Some(Assignment::App { .. }) | Some(Assignment::Virtual) => {
                 let sink_name = channel_sink_name(id);
                 let clean = sanitize_desc(channel_name.trim());
                 let desc = if clean.is_empty() {
-                    format!("OpenWave Channel {id}")
+                    format!("Crossfade Channel {id}")
                 } else {
-                    format!("OpenWave: {clean}")
+                    format!("Crossfade: {clean}")
                 };
                 let args = format!(
                     "sink_name={sink_name} sink_properties='device.description=\"{desc}\"'"
@@ -1730,7 +1734,7 @@ impl PulseManager {
         };
         let sink_name = fx::vstin_sink_name(id);
         let args = format!(
-            "sink_name={sink_name} sink_properties='device.description=\"OpenWave Ch {id} VST In (internal)\"'"
+            "sink_name={sink_name} sink_properties='device.description=\"Crossfade Ch {id} VST In (internal)\"'"
         );
         let weak = Rc::downgrade(rc);
         let _ = intro.load_module("module-null-sink", &args, move |idx| {
@@ -1860,7 +1864,7 @@ impl PulseManager {
         let Some(mut intro) = Self::introspect(rc) else {
             return;
         };
-        let tag = format!("OpenWave ch{id} fx-in");
+        let tag = format!("Crossfade ch{id} fx-in");
         let args = loopback_args(source, sink, &tag);
         let sink = sink.to_string();
         let source = source.to_string();
@@ -1930,7 +1934,7 @@ impl PulseManager {
             Mix::Vod => VOD_SINK,
         };
         let tag = format!(
-            "OpenWave ch{id} {}",
+            "Crossfade ch{id} {}",
             match mix {
                 Mix::Monitor => "monitor",
                 Mix::Stream => "stream",
@@ -2026,7 +2030,7 @@ impl PulseManager {
         let args = loopback_args(
             &format!("{MONITOR_SINK}.monitor"),
             &target,
-            "OpenWave monitor-out",
+            "Crossfade monitor-out",
         );
         let weak = Rc::downgrade(rc);
         let _ = intro.load_module("module-loopback", &args, move |idx| {
@@ -2107,7 +2111,7 @@ impl PulseManager {
             return;
         };
         let args = format!(
-            "sink_name={VOD_SINK} sink_properties='device.description=\"OpenWave VOD Bus\" device.icon_name=audio-input-microphone'"
+            "sink_name={VOD_SINK} sink_properties='device.description=\"Crossfade VOD Bus\" device.icon_name=audio-input-microphone'"
         );
         let weak = Rc::downgrade(rc);
         let _ = intro.load_module("module-null-sink", &args, move |idx| {
@@ -2133,7 +2137,7 @@ impl PulseManager {
                 }
                 return;
             }
-            Self::create_mix_mic(&rc, VOD_SINK, VOD_MIC, "Virtual VOD Mix");
+            Self::create_mix_mic(&rc, VOD_SINK, VOD_MIC, "Crossfade VOD Mix");
             Self::create_peak(&rc, LevelTarget::VodMix, &format!("{VOD_SINK}.monitor"));
             // Add the VOD send to every channel that is already wired;
             // parked/pending channels pick it up when they wire. `target` is
@@ -2260,10 +2264,10 @@ impl PulseManager {
             // WirePlumber remembers one shared "Peak Detect" entry and moves
             // every meter onto the same source.
             let name = match target {
-                LevelTarget::Channel(i) => format!("OpenWave meter ch{i}"),
-                LevelTarget::MonitorMix => "OpenWave meter monitor".to_string(),
-                LevelTarget::StreamMix => "OpenWave meter stream".to_string(),
-                LevelTarget::VodMix => "OpenWave meter vod".to_string(),
+                LevelTarget::Channel(i) => format!("Crossfade meter ch{i}"),
+                LevelTarget::MonitorMix => "Crossfade meter monitor".to_string(),
+                LevelTarget::StreamMix => "Crossfade meter stream".to_string(),
+                LevelTarget::VodMix => "Crossfade meter vod".to_string(),
             };
             let mut props = Proplist::new().expect("proplist");
             let _ = props.set_str("media.name", &name);

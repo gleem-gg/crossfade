@@ -1,5 +1,5 @@
 //! Audio setup assistant: checks that the system routes audio through
-//! OpenWave (default output/input devices, and — when an Elgato Wave XLR is
+//! Crossfade (default output/input devices, and — when an Elgato Wave XLR is
 //! connected — the microphone channel and monitor output), offering one-click
 //! fixes. Shown automatically on first run; later launches only surface a
 //! notice when something drifted.
@@ -32,13 +32,13 @@ pub struct SetupItem {
 
 #[derive(Clone)]
 enum SetupFix {
-    /// Make the system play to the "OpenWave: System" virtual device.
+    /// Make the system play to the "Crossfade: System" virtual device.
     DefaultSink {
         channel_id: u64,
         sink: String,
         needs_assign: bool,
     },
-    /// Make the system record from the "Virtual Stream Mix" microphone.
+    /// Make the system record from the "Crossfade Stream Mix" microphone.
     DefaultSource { source: String },
     /// Feed the Microphone channel from the Wave XLR capture device.
     MicAssignment { channel_id: u64, source: String },
@@ -81,7 +81,7 @@ pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
         items.push(SetupItem {
             title: "Sound Output",
             subtitle: format!(
-                "Use “OpenWave: {}” as the system’s output device",
+                "Use “Crossfade: {}” as the system’s output device",
                 sys.name
             ),
             ok: assigned && manager.default_sink().as_deref() == Some(sink.as_str()),
@@ -95,7 +95,7 @@ pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
 
     items.push(SetupItem {
         title: "Sound Input",
-        subtitle: "Use “Virtual Stream Mix” as the system’s input device".to_string(),
+        subtitle: "Use “Crossfade Stream Mix” as the system’s input device".to_string(),
         ok: manager.default_source().as_deref() == Some(STREAM_MIC),
         fix: SetupFix::DefaultSource {
             source: STREAM_MIC.to_string(),
@@ -218,7 +218,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, deps: SetupDeps) -> (adw::Dialog, Rc
 
     let intro = gtk::Label::builder()
         .label(
-            "OpenWave works best when the system plays all audio through it \
+            "Crossfade works best when the system plays all audio through it \
              and streaming apps record the stream mix. The checks below turn \
              green once everything is in place.",
         )

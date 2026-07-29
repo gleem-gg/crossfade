@@ -139,7 +139,7 @@ impl OutputsPanel {
         let stream_row = output_row(
             "audio-input-microphone-symbolic",
             "Stream Mix",
-            "Select “Virtual Stream Mix” as microphone in OBS, Discord, etc.",
+            "Select “Crossfade Stream Mix” as microphone in OBS, Discord, etc.",
             stream_spacer.upcast_ref(),
             &stream_level.root,
             &stream_scale,
@@ -154,7 +154,7 @@ impl OutputsPanel {
         let vod_row = output_row(
             "camera-video-symbolic",
             "VOD Mix",
-            "Select “Virtual VOD Mix” as a second audio track for recordings",
+            "Select “Crossfade VOD Mix” as a second audio track for recordings",
             vod_spacer.upcast_ref(),
             &vod_level.root,
             &vod_scale,

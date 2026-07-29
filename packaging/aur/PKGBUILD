@@ -1,11 +1,11 @@
 # Maintainer: René Preuß <hello@ghostzero.de>
-pkgname=openwave-mixer
-_pkgsrc=openwave
-pkgver=0.7.0
+pkgname=gleem-crossfade
+_pkgsrc=crossfade
+pkgver=0.8.0
 pkgrel=1
 pkgdesc="Dual-mix virtual audio mixer for PipeWire"
 arch=('x86_64' 'aarch64')
-url="https://github.com/ghostzero/openwave"
+url="https://github.com/gleem-gg/crossfade"
 license=('MIT')
 depends=('gtk4' 'libadwaita' 'libpulse' 'alsa-lib' 'pipewire-pulse' 'hicolor-icon-theme')
 makedepends=('cargo')
@@ -13,12 +13,13 @@ checkdepends=('desktop-file-utils')
 optdepends=('lilv: LV2 effect plugin browser'
             'carla: VST2/VST3 effect support'
             'python: required by the Carla VST host helper')
-# "openwave" on the AUR is an unrelated project that also ships
-# /usr/bin/openwave.
-provides=('openwave')
-conflicts=('openwave')
+# This package was published as "openwave-mixer" before 0.8.0
+provides=('openwave-mixer')
+conflicts=('openwave-mixer')
+replaces=('openwave-mixer')
 source=("$_pkgsrc-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('39a9bebf53b7fc76e191720b61b531e36aa50d1310c356d09b0366d611bbcc8a')
+# Regenerate with `updpkgsums` once the v0.8.0 tag exists
+sha256sums=('SKIP')
 
 prepare() {
   cd "$_pkgsrc-$pkgver"
@@ -34,15 +35,15 @@ build() {
 
 check() {
   cd "$_pkgsrc-$pkgver"
-  desktop-file-validate data/de.ghostzero.OpenWave.desktop
+  desktop-file-validate data/gg.gleem.Crossfade.desktop
 }
 
 package() {
   cd "$_pkgsrc-$pkgver"
-  install -Dm755 target/release/openwave "$pkgdir/usr/bin/openwave"
-  install -Dm644 data/de.ghostzero.OpenWave.desktop \
-    "$pkgdir/usr/share/applications/de.ghostzero.OpenWave.desktop"
-  install -Dm644 data/icons/hicolor/scalable/apps/de.ghostzero.OpenWave.svg \
-    "$pkgdir/usr/share/icons/hicolor/scalable/apps/de.ghostzero.OpenWave.svg"
+  install -Dm755 target/release/gleem-crossfade "$pkgdir/usr/bin/gleem-crossfade"
+  install -Dm644 data/gg.gleem.Crossfade.desktop \
+    "$pkgdir/usr/share/applications/gg.gleem.Crossfade.desktop"
+  install -Dm644 data/icons/hicolor/scalable/apps/gg.gleem.Crossfade.svg \
+    "$pkgdir/usr/share/icons/hicolor/scalable/apps/gg.gleem.Crossfade.svg"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

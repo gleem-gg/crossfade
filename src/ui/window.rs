@@ -179,7 +179,7 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
 
     // ---- Window chrome ----------------------------------------------------------
     let header = adw::HeaderBar::builder()
-        .title_widget(&adw::WindowTitle::new("OpenWave", "Dual-Mix Audio Router"))
+        .title_widget(&adw::WindowTitle::new("Gleem Crossfade", "Dual-Mix Audio Router"))
         .build();
 
     let menu = gio::Menu::new();
@@ -230,7 +230,7 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
 
     let window = adw::ApplicationWindow::builder()
         .application(application)
-        .title("OpenWave")
+        .title("Gleem Crossfade")
         .default_width(1280)
         .default_height(720)
         .content(&split)
@@ -1677,7 +1677,7 @@ fn autostart_enabled() -> bool {
 /// Enable/disable launch-on-login via an XDG autostart entry. The entry runs
 /// the current executable with --hidden so the virtual devices come up in
 /// the background without opening the window.
-fn set_autostart(enable: bool) -> std::io::Result<()> {
+pub(crate) fn set_autostart(enable: bool) -> std::io::Result<()> {
     let path = autostart_file();
     if !enable {
         if path.exists() {
@@ -1690,13 +1690,13 @@ fn set_autostart(enable: bool) -> std::io::Result<()> {
     }
     let exe = std::env::current_exe()
         .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "openwave".to_string());
+        .unwrap_or_else(|_| "gleem-crossfade".to_string());
     std::fs::write(
         &path,
         format!(
             "[Desktop Entry]\n\
              Type=Application\n\
-             Name=OpenWave\n\
+             Name=Gleem Crossfade\n\
              Comment=Dual-mix virtual audio mixer for streaming\n\
              Exec={exe} --hidden\n\
              Icon={}\n\
@@ -1720,7 +1720,7 @@ fn wire_actions(app: &Rc<App>, window: &adw::ApplicationWindow) {
             .unwrap_or(false);
         match set_autostart(enable) {
             Ok(()) => action.set_state(&enable.to_variant()),
-            Err(e) => eprintln!("openwave: could not update autostart entry: {e}"),
+            Err(e) => eprintln!("gleem-crossfade: could not update autostart entry: {e}"),
         }
     });
     window.add_action(&autostart);
@@ -1794,8 +1794,8 @@ fn wire_actions(app: &Rc<App>, window: &adw::ApplicationWindow) {
     about.connect_activate(move |_, _| {
         if let Some(win) = win_weak.upgrade() {
             let dialog = adw::AboutDialog::builder()
-                .application_name("OpenWave")
-                .application_icon("de.ghostzero.OpenWave")
+                .application_name("Gleem Crossfade")
+                .application_icon("gg.gleem.Crossfade")
                 .developer_name("René Preuß")
                 .copyright("© 2026 René Preuß")
                 .version(env!("CARGO_PKG_VERSION"))
@@ -1823,12 +1823,12 @@ fn wire_close(app: &Rc<App>, window: &adw::ApplicationWindow) {
         win.set_visible(false);
         if !notified.replace(true)
             && let Some(gapp) = win.application() {
-                let note = gio::Notification::new("OpenWave is still running");
+                let note = gio::Notification::new("Gleem Crossfade is still running");
                 note.set_body(Some(
                     "The virtual audio devices stay active in the background. \
                      Use Quit in the main menu to stop them.",
                 ));
-                gapp.send_notification(Some("openwave-background"), &note);
+                gapp.send_notification(Some("gleem-crossfade-background"), &note);
             }
         glib::Propagation::Stop
     });

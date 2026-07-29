@@ -30,7 +30,7 @@ impl Sidebar {
 
         let stream_row = adw::ActionRow::builder()
             .title("Stream Mix")
-            .subtitle("Available as the “Virtual Stream Mix” microphone in OBS, Discord, etc.")
+            .subtitle("Available as the “Crossfade Stream Mix” microphone in OBS, Discord, etc.")
             .build();
         stream_row.add_prefix(&gtk::Image::from_icon_name("audio-input-microphone-symbolic"));
         outputs_group.add(&stream_row);
@@ -38,7 +38,7 @@ impl Sidebar {
         let vod_row = adw::ActionRow::builder()
             .title("VOD Mix")
             .subtitle(
-                "Available as the “Virtual VOD Mix” microphone — use it as a \
+                "Available as the “Crossfade VOD Mix” microphone — use it as a \
                  second audio track to keep music out of recordings",
             )
             .visible(false)
@@ -103,7 +103,7 @@ impl Sidebar {
             let subtitle = match &ch.assignment {
                 None => "No input".to_string(),
                 Some(Assignment::Virtual) => {
-                    format!("Virtual device — “OpenWave: {}”", ch.name)
+                    format!("Virtual device — “Crossfade: {}”", ch.name)
                 }
                 Some(a) => describe(a),
             };

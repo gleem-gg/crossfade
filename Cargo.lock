@@ -258,6 +258,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "gleem-crossfade"
+version = "0.8.0"
+dependencies = [
+ "alsa",
+ "glib-build-tools",
+ "gtk4",
+ "libadwaita",
+ "libc",
+ "libloading",
+ "libpulse-binding",
+ "libpulse-glib-binding",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "glib"
 version = "0.22.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -578,22 +594,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "071dfc062690e90b734c0b2273ce72ad0ffa95f0c74596bc250dcfd960262841"
 dependencies = [
  "autocfg",
-]
-
-[[package]]
-name = "openwave"
-version = "0.7.0"
-dependencies = [
- "alsa",
- "glib-build-tools",
- "gtk4",
- "libadwaita",
- "libc",
- "libloading",
- "libpulse-binding",
- "libpulse-glib-binding",
- "serde",
- "serde_json",
 ]
 
 [[package]]

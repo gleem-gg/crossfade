@@ -3,7 +3,7 @@
   <!-- Bundled symbolic icons; GTK looks them up below the application's
        resource base path under icons/, so they behave like theme icons
        (including symbolic recoloring). -->
-  <gresource prefix="/de/ghostzero/OpenWave/icons/scalable/actions">
+  <gresource prefix="/gg/gleem/Crossfade/icons/scalable/actions">
     <file alias="sound-wave-symbolic.svg">icons/sound-wave-symbolic.svg</file>
   </gresource>
 </gresources>

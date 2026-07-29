@@ -1,5 +1,5 @@
 //! Elgato Wave XLR settings: the microphone gain and headphone output
-//! volume stored here are re-applied every time OpenWave starts, working
+//! volume stored here are re-applied every time Crossfade starts, working
 //! around a firmware bug where the device occasionally forgets its levels.
 //!
 //! The subtitle previews follow the device's LED ring: PipeWire's software
@@ -117,7 +117,7 @@ pub fn open(parent: &impl IsA<gtk::Widget>, deps: XlrDeps) -> adw::Dialog {
     let group = adw::PreferencesGroup::builder()
         .title("Startup Volumes")
         .description(
-            "Applied again every time OpenWave starts — the Wave XLR \
+            "Applied again every time Crossfade starts — the Wave XLR \
              occasionally resets its volume settings on its own.",
         )
         .build();

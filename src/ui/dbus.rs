@@ -1,5 +1,5 @@
-//! Session-bus control API: the `de.ghostzero.OpenWave.Mixer1` interface at
-//! `/de/ghostzero/OpenWave/Mixer`, exported on the D-Bus connection the
+//! Session-bus control API: the `gg.gleem.Crossfade.Mixer1` interface at
+//! `/gg/gleem/Crossfade/Mixer`, exported on the D-Bus connection the
 //! GApplication already owns. External integrations — hotkey daemons,
 //! stream-deck software, desktop widgets, plain scripts — drive the mixer
 //! through it; every method funnels into the same `ControlAction` core the
@@ -22,12 +22,12 @@ pub struct DbusDeps {
     pub perform: Rc<dyn Fn(ControlAction)>,
 }
 
-const IFACE: &str = "de.ghostzero.OpenWave.Mixer1";
-const PATH: &str = "/de/ghostzero/OpenWave/Mixer";
+const IFACE: &str = "gg.gleem.Crossfade.Mixer1";
+const PATH: &str = "/gg/gleem/Crossfade/Mixer";
 
 const INTROSPECTION_XML: &str = r#"
 <node>
-  <interface name="de.ghostzero.OpenWave.Mixer1">
+  <interface name="gg.gleem.Crossfade.Mixer1">
     <method name="ListChannels">
       <arg type="a(tss)" name="channels" direction="out"/>
     </method>
@@ -86,7 +86,7 @@ pub fn register(application: &adw::Application, deps: DbusDeps) -> Option<Rc<dyn
         })
         .build();
     if let Err(e) = registered {
-        eprintln!("openwave: could not register the D-Bus control interface: {e}");
+        eprintln!("gleem-crossfade: could not register the D-Bus control interface: {e}");
         return None;
     }
     let connection = connection.clone();

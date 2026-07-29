@@ -5,7 +5,7 @@
 //! `carla-discovery-native` tool, which safely loads each binary in a
 //! throwaway process and reports the plugins inside — essential for VST3
 //! bundles that contain many plugins behind one file. Results are cached
-//! in `~/.cache/openwave/vst-scan.json` keyed by path + mtime, so only
+//! in `~/.cache/gleem-crossfade/vst-scan-v2.json` keyed by path + mtime, so only
 //! new or changed binaries are probed on later scans.
 
 use std::collections::HashMap;
@@ -56,7 +56,7 @@ struct CacheFile {
 
 fn cache_path() -> PathBuf {
     // v2: entries carry unique_id.
-    glib::user_cache_dir().join("openwave").join("vst-scan-v2.json")
+    glib::user_cache_dir().join("gleem-crossfade").join("vst-scan-v2.json")
 }
 
 fn discovery_tool() -> Option<PathBuf> {

@@ -12,15 +12,23 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::glib;
 
-pub const APP_ID: &str = "de.ghostzero.OpenWave";
+pub const APP_ID: &str = "gg.gleem.Crossfade";
 
 fn main() -> glib::ExitCode {
     // Bundled resources (symbolic icons not shipped by system themes).
     let resources = gtk::gio::Resource::from_data(&glib::Bytes::from_static(
-        include_bytes!(concat!(env!("OUT_DIR"), "/openwave.gresource")),
+        include_bytes!(concat!(env!("OUT_DIR"), "/gleem-crossfade.gresource")),
     ))
     .expect("embedded gresource is valid");
     gtk::gio::resources_register(&resources);
+
+    // One-time migration of config/state from the pre-rename OpenWave identity.
+    if config::migrate_from_openwave() {
+        // A legacy autostart entry existed; recreate it under the new app id.
+        if let Err(e) = ui::window::set_autostart(true) {
+            eprintln!("gleem-crossfade: could not migrate the autostart entry: {e}");
+        }
+    }
 
     let app = adw::Application::builder().application_id(APP_ID).build();
     app.add_main_option(

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""OpenWave VST host helper.
+"""Crossfade VST host helper.
 
 Hosts one channel's VST plugins headlessly through Carla's engine library
-(no Carla UI), controlled by OpenWave over a JSON-lines protocol:
+(no Carla UI), controlled by Crossfade over a JSON-lines protocol:
 
   stdin  <- {"cmd": "load", "plugins": [{"cfg_id", "path", "format",
              "label", "active", "params": {"<index>": value}}, ...]}
@@ -19,11 +19,11 @@ logs there):
     "error", "params": [{"index", "name", "min", "max", "def", "value",
     "toggled", "integer"}]}]}
   {"reply": "param", "cfg_id": N, "param": I, "value": V}   (edited in the
-    plugin's native UI — OpenWave persists it)
+    plugin's native UI — Crossfade persists it)
   {"reply": "ui", "cfg_id": N, "visible": false}            (window closed)
 
 The engine registers as a JACK client (PipeWire) named after argv[1], in
-continuous-rack mode: fixed stereo in/out ports that OpenWave wires with
+continuous-rack mode: fixed stereo in/out ports that Crossfade wires with
 pw-link. argv[2] is a directory for per-plugin state files (full plugin
 state, including non-parameter data, restored on the next load).
 """
@@ -34,7 +34,7 @@ import select
 import signal
 import sys
 
-CLIENT_NAME = sys.argv[1] if len(sys.argv) > 1 else "OpenWave_VST"
+CLIENT_NAME = sys.argv[1] if len(sys.argv) > 1 else "Crossfade_VST"
 STATE_DIR = sys.argv[2] if len(sys.argv) > 2 else ""
 
 # Protocol writes must not interleave with Carla's own stdout logging:
@@ -43,7 +43,7 @@ STATE_DIR = sys.argv[2] if len(sys.argv) > 2 else ""
 PROTO = os.fdopen(os.dup(1), "w", buffering=1)
 os.dup2(2, 1)
 
-# Die gracefully (state saved in the finally block) when OpenWave
+# Die gracefully (state saved in the finally block) when Crossfade
 # terminates us on a rack rebuild or quit.
 signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
 
@@ -100,7 +100,7 @@ host.set_engine_option(ENGINE_OPTION_PATH_BINARIES, 0, os.path.dirname(CARLA_LIB
 # OSC control ports and the losers fail.
 host.set_engine_option(ENGINE_OPTION_OSC_ENABLED, 0, "")
 
-# cfg_id (OpenWave's stable id) -> Carla plugin index. Indices never shift
+# cfg_id (Crossfade's stable id) -> Carla plugin index. Indices never shift
 # because the plugin set is fixed per process: structural changes respawn
 # the helper.
 plugin_ids = {}
@@ -250,7 +250,7 @@ try:
             continue
         chunk = os.read(0, 65536)
         if not chunk:
-            break  # OpenWave went away
+            break  # Crossfade went away
         buf += chunk
         while b"\n" in buf:
             line, buf = buf.split(b"\n", 1)

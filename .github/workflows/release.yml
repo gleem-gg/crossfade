@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   assets:
-    if: github.repository == 'ghostzero/openwave'
+    if: github.repository == 'gleem-gg/crossfade'
     runs-on: ubuntu-latest
     container: fedora:latest
     steps:
@@ -35,8 +35,8 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
           cargo vendor --locked vendor >/dev/null
-          tar -cJf "openwave-$version-vendor.tar.xz" vendor
-          sha256sum "openwave-$version-vendor.tar.xz" > SHA256SUMS
+          tar -cJf "gleem-crossfade-$version-vendor.tar.xz" vendor
+          sha256sum "gleem-crossfade-$version-vendor.tar.xz" > SHA256SUMS
 
       - name: Upload to release
         if: github.event_name == 'release'
@@ -44,7 +44,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >
           gh release upload "${{ github.event.release.tag_name }}"
-          openwave-*-vendor.tar.xz SHA256SUMS
+          gleem-crossfade-*-vendor.tar.xz SHA256SUMS
           --clobber -R "${{ github.repository }}"
 
       - name: Announce on Discord
@@ -63,22 +63,22 @@ jobs:
           # Discord embeds don't render markdown headings; turn them into bold
           notes=$(printf '%s' "$BODY" | sed -E 's/^#{1,3} +(.*)/**\1**/')
           jq -n --arg tag "$TAG" --arg url "$URL" --arg notes "$notes" --arg ts "$PUBLISHED" '
-            {content: "🚀 **OpenWave \($tag) is out!**",
+            {content: "🚀 **Gleem Crossfade \($tag) is out!**",
              embeds: [{
-               title: "OpenWave \($tag)",
+               title: "Gleem Crossfade \($tag)",
                url: $url,
                description: ($notes | if length > 4096 then .[:4093] + "…" else . end),
                color: 5793266,
                fields: [
                  {name: "📥 Get it",
-                  value: "```sh\ngit clone https://github.com/ghostzero/openwave\ncd openwave && make install\n```",
+                  value: "```sh\ngit clone https://github.com/gleem-gg/crossfade\ncd crossfade && make install\n```",
                   inline: true},
                  {name: "🔗 Links",
-                  value: "[Release notes](\($url))\n[Report an issue](https://github.com/ghostzero/openwave/issues)",
+                  value: "[Release notes](\($url))\n[Report an issue](https://github.com/gleem-gg/crossfade/issues)",
                   inline: true}
                ],
-               image: {url: "https://raw.githubusercontent.com/ghostzero/openwave/main/img.png"},
-               footer: {text: "OpenWave — dual-mix virtual audio mixer for Linux • MIT"},
+               image: {url: "https://raw.githubusercontent.com/gleem-gg/crossfade/main/img.png"},
+               footer: {text: "Gleem Crossfade — dual-mix virtual audio mixer for Linux • MIT"},
                timestamp: $ts
              }]}' \
           | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"

@@ -1,7 +1,7 @@
 //! MIDI controller input/output through the ALSA sequencer (which PipeWire
 //! bridges, so hardware controllers show up regardless of the audio stack).
 //!
-//! A single duplex sequencer client "OpenWave" auto-connects every hardware
+//! A single duplex sequencer client "Crossfade" auto-connects every hardware
 //! controller: readable ports are subscribed into "Control In", writable
 //! ports are remembered for LED feedback via "Feedback Out". Hotplug is
 //! handled by subscribing to the kernel's announce port; new clients are
@@ -120,14 +120,14 @@ impl MidiManager {
         let (seq, client_id, in_port, out_port) = match Self::open_seq() {
             Ok(v) => v,
             Err(e) => {
-                eprintln!("openwave: MIDI disabled (ALSA sequencer unavailable): {e}");
+                eprintln!("gleem-crossfade: MIDI disabled (ALSA sequencer unavailable): {e}");
                 return;
             }
         };
         let fds = match (&*seq, Some(alsa::Direction::Capture)).get() {
             Ok(fds) => fds,
             Err(e) => {
-                eprintln!("openwave: MIDI disabled (no sequencer poll fd): {e}");
+                eprintln!("gleem-crossfade: MIDI disabled (no sequencer poll fd): {e}");
                 return;
             }
         };
@@ -147,7 +147,7 @@ impl MidiManager {
 
     fn open_seq() -> alsa::Result<(Rc<Seq>, i32, i32, i32)> {
         let seq = Seq::open(None, None, true)?;
-        seq.set_client_name(c"OpenWave")?;
+        seq.set_client_name(c"Crossfade")?;
         let client_id = seq.client_id()?;
         let caps_in = PortCap::WRITE | PortCap::SUBS_WRITE;
         let caps_out = PortCap::READ | PortCap::SUBS_READ;

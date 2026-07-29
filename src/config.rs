@@ -12,7 +12,7 @@ pub const TEMPLATE_NAMES: [&str; 6] = ["Game", "Music", "Voice Chat", "Browser",
 
 /// What feeds an input channel: a capture source (hardware input or a monitor
 /// of another device), an application's playback stream matched by its
-/// `application.name`, or a standalone virtual device ("OpenWave: <name>")
+/// `application.name`, or a standalone virtual device ("Crossfade: <name>")
 /// that other software can select as an output.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -234,7 +234,7 @@ impl Default for MasterConfig {
     }
 }
 
-/// Volume levels re-applied to an Elgato Wave XLR every time OpenWave starts
+/// Volume levels re-applied to an Elgato Wave XLR every time Crossfade starts
 /// (the device occasionally forgets its volume settings). Percentages 0–100;
 /// `None` = leave that control alone.
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -437,7 +437,7 @@ pub struct Config {
     pub next_channel_id: u64,
     pub channels: Vec<ChannelConfig>,
     pub master: MasterConfig,
-    /// Third mix bus exposed as the "Virtual VOD Mix" microphone, for
+    /// Third mix bus exposed as the "Crossfade VOD Mix" microphone, for
     /// keeping e.g. music out of the VOD/recording track. Off by default so
     /// the two-mix UI stays clean.
     pub vod_mix_enabled: bool,
@@ -476,9 +476,48 @@ impl Default for Config {
     }
 }
 
+/// One-time migration from the pre-rename OpenWave identity: copies the old
+/// config directory (config.json, fx/, vst-state/) if the new one doesn't
+/// exist yet. The old directory is left in place as a downgrade path.
+/// Returns whether a legacy autostart entry existed (it is removed here; the
+/// caller recreates it under the new app id).
+pub fn migrate_from_openwave() -> bool {
+    let config_root = glib::user_config_dir();
+    let new_dir = config_root.join("gleem-crossfade");
+    let old_dir = config_root.join("openwave");
+    if !new_dir.exists()
+        && old_dir.is_dir()
+        && let Err(e) = copy_dir(&old_dir, &new_dir)
+    {
+        eprintln!("gleem-crossfade: could not migrate the OpenWave config: {e}");
+    }
+    let old_autostart = config_root
+        .join("autostart")
+        .join("de.ghostzero.OpenWave.desktop");
+    if old_autostart.exists() {
+        let _ = fs::remove_file(&old_autostart);
+        return true;
+    }
+    false
+}
+
+fn copy_dir(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dst.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir(&entry.path(), &target)?;
+        } else {
+            fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
 impl Config {
     fn path() -> PathBuf {
-        glib::user_config_dir().join("openwave").join("config.json")
+        glib::user_config_dir().join("gleem-crossfade").join("config.json")
     }
 
     pub fn load() -> Self {

@@ -58,7 +58,7 @@ pub fn load_css() {
         // Make the bundled symbolic icons (registered as a GResource in
         // main) resolvable by name like theme icons.
         gtk::IconTheme::for_display(&display)
-            .add_resource_path("/de/ghostzero/OpenWave/icons");
+            .add_resource_path("/gg/gleem/Crossfade/icons");
     }
 }
 

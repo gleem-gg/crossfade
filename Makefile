@@ -1,5 +1,5 @@
-APP_ID  := de.ghostzero.OpenWave
-BIN     := openwave
+APP_ID  := gg.gleem.Crossfade
+BIN     := gleem-crossfade
 PREFIX  ?= $(HOME)/.local
 BINDIR  := $(DESTDIR)$(PREFIX)/bin
 APPDIR  := $(DESTDIR)$(PREFIX)/share/applications

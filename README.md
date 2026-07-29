@@ -1,11 +1,11 @@
-# OpenWave
+# Gleem Crossfade
 
 A dual-mix virtual audio mixer for Linux, built with GTK4/libadwaita on top of
-PipeWire. OpenWave routes your microphone, applications, and virtual devices
-into two independent mixes — inspired by Elgato Wave Link, but without
-requiring any specific hardware.
+PipeWire. Crossfade routes your microphone, applications, and virtual devices
+into two independent mixes — no special hardware required. Part of the
+[Gleem](https://gleem.gg) streaming tools.
 
-![OpenWave](img.png)
+![Gleem Crossfade](img.png)
 
 ## The dual-mix concept
 
@@ -14,18 +14,18 @@ Every input channel has **two independent faders**:
 - **Monitor Mix** — what *you* hear. Routed to a hardware output of your
   choice (headphones, speakers).
 - **Stream Mix** — what *your audience* hears. Exposed as a virtual
-  microphone called **“Virtual Stream Mix”** that you select as the input
+  microphone called **“Crossfade Stream Mix”** that you select as the input
   device in OBS, Discord, Zoom, or any other application.
 
 This lets you, for example, listen to music loudly while streaming it
 quietly, or hear a voice chat that never reaches your stream at all.
 
 An optional third mix — the **VOD Mix**, enabled from the main menu — adds a
-third fader per channel and a second virtual microphone, **“Virtual VOD
-Mix”**. In OBS, assign *Virtual Stream Mix* to your live track and *Virtual
-VOD Mix* to the recording track, then pull the Music channel to zero on the
-VOD fader: your live audience hears the music, while your VOD/recording
-stays free of DMCA-problematic audio.
+third fader per channel and a second virtual microphone, **“Crossfade VOD
+Mix”**. In OBS, assign *Crossfade Stream Mix* to your live track and
+*Crossfade VOD Mix* to the recording track, then pull the Music channel to
+zero on the VOD fader: your live audience hears the music, while your
+VOD/recording stays free of DMCA-problematic audio.
 
 ## Features
 
@@ -37,21 +37,21 @@ stays free of DMCA-problematic audio.
   - *Applications* — running playback streams, matched by application name
     and moved into the channel automatically.
   - *Virtual devices* — the channel appears as a selectable output device
-    named `OpenWave: <channel>`. Point Discord's output at
-    `OpenWave: Voice Chat`, or set `OpenWave: System` as your system default
-    output; OBS can also capture these devices directly ("Audio Output
-    Capture (PulseAudio)").
+    named `Crossfade: <channel>`. Point Discord's output at
+    `Crossfade: Voice Chat`, or set `Crossfade: System` as your system
+    default output; OBS can also capture these devices directly ("Audio
+    Output Capture (PulseAudio)").
 - **Per-channel effects**: insert **VST2/VST3 and LV2 plugins** (noise
   suppression, gates, compressors, EQs, …) on any input — browsed, ordered,
   bypassed, and tweaked with live parameter sliders entirely inside
-  OpenWave's own UI. Effects are applied before the monitor/stream split,
+  Crossfade's own UI. Effects are applied before the monitor/stream split,
   so both mixes hear the processed signal.
 - **Per-channel, per-mix volume and mute**, with optional fader linking.
 - **Channel colors**: mark each input with a color (Microphone green,
   Browser rose, …) via the color bar above the input selector — and
   right-click it to bind a pad on an RGB pad controller that lights up in
   that color, so the right fader is always easy to find.
-- **Optional VOD Mix**: a third bus (“Virtual VOD Mix”) for a second OBS
+- **Optional VOD Mix**: a third bus (“Crossfade VOD Mix”) for a second OBS
   audio track, so music can play live but stay out of the VOD/recording.
 - **Master volume and mute** for every mix, plus live level meters
   everywhere.
@@ -63,14 +63,14 @@ stays free of DMCA-problematic audio.
 - **D-Bus control API** on the session bus: set volumes, toggle mutes, and
   switch MIDI profiles from scripts, hotkey daemons, stream-deck software,
   or desktop widgets — no plugins required.
-- **Self-healing routing**: OpenWave re-applies volumes and re-attaches
+- **Self-healing routing**: Crossfade re-applies volumes and re-attaches
   streams if the session manager moves them, and cleans up stale devices
   from crashed sessions on startup.
 - **Background operation**: closing the window keeps the virtual devices
-  running; enable *Start at Login* in the main menu and OpenWave launches
+  running; enable *Start at Login* in the main menu and Crossfade launches
   hidden on login, so your audio setup is always ready.
 - Configuration persists across restarts at
-  `~/.config/openwave/config.json`.
+  `~/.config/gleem-crossfade/config.json`.
 
 ## Requirements
 
@@ -89,7 +89,7 @@ Optional, for effects:
   On Debian/Ubuntu the LV2 loader ships with PipeWire itself; install
   `liblilv-0-0` and e.g. `lsp-plugins-lv2`.
 - **VST plugins** need **Carla** (`sudo dnf install Carla` / `sudo apt
-  install carla`) and Python 3: OpenWave hosts VSTs headlessly through
+  install carla`) and Python 3: Crossfade hosts VSTs headlessly through
   Carla's engine library — you never see or use Carla itself. Plugins are
   discovered in `~/vst`, `~/.vst`, `~/.lxvst`, `~/.vst3`, the system
   `vst`/`vst3` folders, and `$VST_PATH`/`$VST3_PATH`.
@@ -99,15 +99,15 @@ Optional, for effects:
 ### Fedora (COPR)
 
 ```sh
-sudo dnf copr enable ghost0/openwave
-sudo dnf install openwave
+sudo dnf copr enable ghost0/crossfade
+sudo dnf install gleem-crossfade
 ```
 
 ### Arch Linux (AUR)
 
 ```sh
-yay -S openwave-mixer        # or paru -S openwave-mixer, or build manually:
-git clone https://aur.archlinux.org/openwave-mixer.git && cd openwave-mixer && makepkg -si
+yay -S gleem-crossfade        # or paru -S gleem-crossfade, or build manually:
+git clone https://aur.archlinux.org/gleem-crossfade.git && cd gleem-crossfade && makepkg -si
 ```
 
 ### From source
@@ -133,17 +133,29 @@ make install    # installs to ~/.local by default
 
 `make install` places the binary, the desktop entry, and the app icon under
 `$(PREFIX)` (default `~/.local`); pass `PREFIX=/usr/local` for a system-wide
-install. Make sure `~/.local/bin` is on your `PATH`, then launch **OpenWave**
-from your app grid, or run `openwave` directly. `make uninstall` removes
-everything again.
+install. Make sure `~/.local/bin` is on your `PATH`, then launch **Gleem
+Crossfade** from your app grid, or run `gleem-crossfade` directly.
+`make uninstall` removes everything again.
+
+### Upgrading from OpenWave
+
+Crossfade was previously published as **OpenWave**. Your configuration
+(channels, volumes, effects, MIDI profiles) and the autostart setting are
+migrated automatically on first start; the old `~/.config/openwave`
+directory is left untouched. Two things must be re-picked once, because the
+device names changed: select **“Crossfade Stream Mix”** again in OBS/Discord,
+and if a `OpenWave: <channel>` device was your system default output, choose
+its `Crossfade: <channel>` replacement (the setup assistant offers this fix
+automatically). D-Bus scripts must switch to the new
+`gg.gleem.Crossfade.Mixer1` interface.
 
 ## Quick start
 
-1. Start OpenWave. It creates the virtual devices automatically.
+1. Start Crossfade. It creates the virtual devices automatically.
 2. Assign your microphone to the *Microphone* channel.
-3. Set `OpenWave: System` as your default output in system sound settings so
-   desktop audio flows through the *System* channel.
-4. In OBS/Discord, select **“Virtual Stream Mix”** as the microphone.
+3. Set `Crossfade: System` as your default output in system sound settings
+   so desktop audio flows through the *System* channel.
+4. In OBS/Discord, select **“Crossfade Stream Mix”** as the microphone.
 5. Pick your headphones as the *Monitor Mix* output device in the Outputs
    section — and mix away.
 
@@ -178,26 +190,26 @@ survive replugging.
 
 ### Scripting via D-Bus
 
-OpenWave exports `de.ghostzero.OpenWave.Mixer1` at
-`/de/ghostzero/OpenWave/Mixer` on the session bus while it runs —
+Crossfade exports `gg.gleem.Crossfade.Mixer1` at
+`/gg/gleem/Crossfade/Mixer` on the session bus while it runs —
 usable from GNOME/KDE custom shortcuts, stream-deck tools, status-bar
 widgets, or plain shell scripts:
 
 ```sh
 # What channels exist?
-gdbus call --session --dest de.ghostzero.OpenWave \
-  --object-path /de/ghostzero/OpenWave/Mixer \
-  --method de.ghostzero.OpenWave.Mixer1.ListChannels
+gdbus call --session --dest gg.gleem.Crossfade \
+  --object-path /gg/gleem/Crossfade/Mixer \
+  --method gg.gleem.Crossfade.Mixer1.ListChannels
 
 # Cough button: toggle the microphone in the stream mix (channel id 1)
-gdbus call --session --dest de.ghostzero.OpenWave \
-  --object-path /de/ghostzero/OpenWave/Mixer \
-  --method de.ghostzero.OpenWave.Mixer1.ToggleChannelMute 1 stream
+gdbus call --session --dest gg.gleem.Crossfade \
+  --object-path /gg/gleem/Crossfade/Mixer \
+  --method gg.gleem.Crossfade.Mixer1.ToggleChannelMute 1 stream
 
 # Set the monitor master volume to 50%
-gdbus call --session --dest de.ghostzero.OpenWave \
-  --object-path /de/ghostzero/OpenWave/Mixer \
-  --method de.ghostzero.OpenWave.Mixer1.SetMasterVolume monitor 0.5
+gdbus call --session --dest gg.gleem.Crossfade \
+  --object-path /gg/gleem/Crossfade/Mixer \
+  --method gg.gleem.Crossfade.Mixer1.SetMasterVolume monitor 0.5
 ```
 
 `GetVolumes` returns the whole mixer state as JSON, and the
@@ -206,9 +218,9 @@ re-query to keep an external display in sync.
 
 ## How it works
 
-OpenWave talks to PipeWire through the PulseAudio client API on the GTK main
-loop. It creates one null-sink bus per mix (`OpenWave_Monitor`,
-`OpenWave_Stream`, and `OpenWave_Vod` when the VOD Mix is enabled), routes
+Crossfade talks to PipeWire through the PulseAudio client API on the GTK
+main loop. It creates one null-sink bus per mix (`Crossfade_Monitor`,
+`Crossfade_Stream`, and `Crossfade_Vod` when the VOD Mix is enabled), routes
 every channel through one loopback stream per mix (each carrying its own
 volume and mute), exposes the stream and VOD buses as real capture devices
 via remap sources, and drives the level meters with low-rate peak-detect
@@ -218,13 +230,13 @@ configured.
 
 Effect chains run out-of-process: each channel with effects gets a small
 `pipewire -c` child hosting a `filter-chain` module (sink in, source out),
-generated from your chain at `~/.config/openwave/fx/`. LV2 parameter changes
-are applied live via `pw-cli set-param`. VST plugins are hosted by another
-helper child (`vsthost.py`, driving Carla's engine library headlessly over a
-JSON pipe) that appears as a JACK client and is wired in with `pw-link`;
-plugins are probed once with `carla-discovery-native` and cached in
-`~/.cache/openwave/vst-scan.json`. A crashing plugin can't take OpenWave
-down — the channel falls back to its direct wiring.
+generated from your chain at `~/.config/gleem-crossfade/fx/`. LV2 parameter
+changes are applied live via `pw-cli set-param`. VST plugins are hosted by
+another helper child (`vsthost.py`, driving Carla's engine library headlessly
+over a JSON pipe) that appears as a JACK client and is wired in with
+`pw-link`; plugins are probed once with `carla-discovery-native` and cached
+in `~/.cache/gleem-crossfade/vst-scan-v2.json`. A crashing plugin can't take
+Crossfade down — the channel falls back to its direct wiring.
 
 ## License
 
