@@ -140,8 +140,11 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
     mixer.append(&heading_label("Outputs"));
     mixer.append(&outputs.root);
 
+    // Threshold = maximum: use the full window width up to the cap; without
+    // this the clamp eases side margins in long before the strips fit.
     let clamp = adw::Clamp::builder()
         .maximum_size(1600)
+        .tightening_threshold(1600)
         .child(&mixer)
         .build();
 
