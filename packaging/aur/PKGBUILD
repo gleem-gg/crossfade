@@ -18,8 +18,7 @@ provides=('openwave-mixer')
 conflicts=('openwave-mixer')
 replaces=('openwave-mixer')
 source=("$_pkgsrc-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-# Regenerate with `updpkgsums` once the v0.8.0 tag exists
-sha256sums=('SKIP')
+sha256sums=('577c872f4e77284bfef88ad8011d69d98e4fa79af7e6e868a61052e742c04253')
 
 prepare() {
   cd "$_pkgsrc-$pkgver"
