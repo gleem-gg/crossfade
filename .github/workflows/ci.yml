@@ -13,7 +13,10 @@ on:
 
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  # Superseding a pull request's run is free; superseding a run on main is
+  # not, because that commit is what COPR publishes and it would end up
+  # with no verification at all.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   check:
