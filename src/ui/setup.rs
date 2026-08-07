@@ -59,7 +59,10 @@ fn system_channel(config: &Config) -> Option<&ChannelConfig> {
         })
 }
 
-fn mic_channel(config: &Config) -> Option<&ChannelConfig> {
+/// The channel standing in for "the microphone": the permanent one by that
+/// name, else the first permanent channel that is not one of our own devices.
+/// Shared with the tray indicator, which mutes exactly this channel.
+pub fn mic_channel(config: &Config) -> Option<&ChannelConfig> {
     config
         .channels
         .iter()
