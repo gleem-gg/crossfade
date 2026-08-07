@@ -3,7 +3,8 @@
 A dual-mix virtual audio mixer for Linux, built with GTK4/libadwaita on top of
 PipeWire. Crossfade routes your microphone, applications, and virtual devices
 into two independent mixes — no special hardware required. Part of the
-[Gleem](https://gleem.gg) streaming tools.
+[Gleem](https://gleem.gg/crossfade?mtm_campaign=github-readme&mtm_source=github&mtm_medium=repo&mtm_content=crossfade-intro&mtm_kwd=crossfade)
+streaming tools.
 
 ![Gleem Crossfade](img.png)
 
