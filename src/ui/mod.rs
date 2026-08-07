@@ -6,6 +6,7 @@ pub mod midi;
 pub mod outputs;
 pub mod setup;
 pub mod sidebar;
+pub mod tray;
 pub mod wave_xlr;
 pub mod window;
 

@@ -21,6 +21,7 @@ use super::midi as midi_ui;
 use super::outputs::OutputsPanel;
 use super::setup;
 use super::sidebar::Sidebar;
+use super::tray;
 use super::wave_xlr;
 
 /// An armed "Learn MIDI" dialog waiting for the next hardware event.
@@ -85,6 +86,9 @@ struct App {
     midi_hook: RefCell<Option<Rc<dyn Fn()>>>,
     /// Emits the D-Bus StateChanged signal (None when off the session bus).
     dbus_signal: RefCell<Option<Rc<dyn Fn()>>>,
+    /// Pushes the microphone's mute state to the tray indicator (None when
+    /// there is no session bus).
+    tray: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
@@ -264,6 +268,7 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
         midi_led: RefCell::new(HashMap::new()),
         midi_hook: RefCell::new(None),
         dbus_signal: RefCell::new(None),
+        tray: RefCell::new(None),
     });
 
     wire_actions(&app, &window);
@@ -280,7 +285,32 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
             application,
             dbus::DbusDeps {
                 config: app.config.clone(),
+                perform: perform_action.clone(),
+            },
+        );
+        let present: Rc<dyn Fn()> = {
+            let window = window.downgrade();
+            Rc::new(move || {
+                if let Some(window) = window.upgrade() {
+                    window.present();
+                }
+            })
+        };
+        let quit: Rc<dyn Fn()> = {
+            let window = window.downgrade();
+            Rc::new(move || {
+                if let Some(window) = window.upgrade() {
+                    WidgetExt::activate_action(&window, "app.quit", None).ok();
+                }
+            })
+        };
+        *app.tray.borrow_mut() = tray::register(
+            application,
+            tray::TrayDeps {
+                config: app.config.clone(),
                 perform: perform_action,
+                present,
+                quit,
             },
         );
     }
@@ -326,6 +356,10 @@ fn schedule_save(app: &Rc<App>) {
         let signal = app.dbus_signal.borrow().clone();
         if let Some(signal) = signal {
             signal();
+        }
+        let tray = app.tray.borrow().clone();
+        if let Some(tray) = tray {
+            tray();
         }
     });
 }
