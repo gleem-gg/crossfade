@@ -105,6 +105,9 @@ impl Sidebar {
                 Some(Assignment::Virtual) => {
                     format!("Virtual device — “Crossfade: {}”", ch.name)
                 }
+                Some(Assignment::CatchAll) => {
+                    "Every app not assigned to another channel".to_string()
+                }
                 Some(a) => describe(a),
             };
             row.set_subtitle(&glib::markup_escape_text(&subtitle));

@@ -31,7 +31,7 @@ use pulse::sample::{Format, Spec};
 use pulse::stream::{FlagSet as StreamFlagSet, PeekResult, Stream};
 use pulse::volume::{ChannelVolumes, Volume};
 
-use crate::config::{Assignment, ChannelConfig, Config, MasterConfig};
+use crate::config::{self, Assignment, ChannelConfig, Config, MasterConfig};
 use crate::fx::{self, FxEvent, FxManager};
 use crate::lv2;
 
@@ -1457,8 +1457,10 @@ impl PulseManager {
         entry.volume_raw.abs_diff(desired) > 1 || entry.mute != mute
     }
 
-    /// Move application streams matching an `App` assignment into that
-    /// channel's private sink.
+    /// Move application streams into the private sink of the channel that
+    /// claims them: the first `App` channel whose match rules fit, or else
+    /// the catch-all channel. Streams the user deliberately pointed at one of
+    /// Crossfade's own devices are left alone by the catch-all.
     fn reconcile_apps(rc: &Rc<RefCell<Inner>>) {
         let moves: Vec<(u32, String)> = {
             let inner = rc.borrow();
@@ -1468,35 +1470,66 @@ impl PulseManager {
                 .iter()
                 .map(|(i, e)| (*i, e.name.as_str()))
                 .collect();
-            let mut moves = Vec::new();
+            // A channel can only take streams once its null sink is up.
+            let ready_sink = |id: u64| -> Option<String> {
+                inner.channels.get(&id).and_then(|rt| rt.sink_module)?;
+                let target = channel_sink_name(id);
+                inner
+                    .sinks
+                    .iter()
+                    .any(|(_, e)| e.name == target)
+                    .then_some(target)
+            };
+            let mut rules: Vec<(&[String], String)> = Vec::new();
+            let mut catch_all: Option<String> = None;
             for c in &cfg.channels {
-                let Some(Assignment::App { name }) = &c.assignment else {
-                    continue;
-                };
-                if inner
-                    .channels
-                    .get(&c.id)
-                    .and_then(|rt| rt.sink_module)
-                    .is_none()
+                match &c.assignment {
+                    Some(a @ Assignment::App { .. }) => {
+                        if let Some(target) = ready_sink(c.id) {
+                            rules.push((a.apps(), target));
+                        }
+                    }
+                    Some(Assignment::CatchAll) if catch_all.is_none() => {
+                        catch_all = ready_sink(c.id);
+                    }
+                    _ => {}
+                }
+            }
+            let mut moves = Vec::new();
+            for si in inner.sink_inputs.values() {
+                if si
+                    .owner_module
+                    .is_some_and(|m| inner.owned_modules.contains(&m))
                 {
                     continue;
                 }
-                let target = channel_sink_name(c.id);
-                if !inner.sinks.iter().any(|(_, e)| e.name == target) {
+                let Some(app) = si.app_name.as_deref().filter(|n| !n.is_empty()) else {
+                    continue;
+                };
+                // Belt and braces next to the owned-module check above: never
+                // let the catch-all swallow one of Crossfade's own streams —
+                // their media.name starts with "Crossfade", the client's
+                // application.name with "Gleem Crossfade".
+                if app.starts_with("Crossfade") || app.starts_with("Gleem Crossfade") {
                     continue;
                 }
-                for si in inner.sink_inputs.values() {
-                    if si
-                        .owner_module
-                        .is_some_and(|m| inner.owned_modules.contains(&m))
-                    {
-                        continue;
-                    }
-                    if si.app_name.as_deref() == Some(name.as_str())
-                        && sink_name_by_index.get(&si.sink).copied() != Some(target.as_str())
-                    {
-                        moves.push((si.index, target.clone()));
-                    }
+                let current = sink_name_by_index.get(&si.sink).copied().unwrap_or("");
+                let target = rules
+                    .iter()
+                    .find(|(apps, _)| apps.iter().any(|rule| config::app_matches(rule, app)))
+                    .map(|(_, target)| target.as_str())
+                    .or_else(|| {
+                        // A stream already sitting on one of our channels was
+                        // put there deliberately (from the app's own output
+                        // picker) — unless that channel simply is the system
+                        // default output, which is where everything nobody
+                        // claims ends up anyway.
+                        let deliberate = current.starts_with(OWN_PREFIX)
+                            && Some(current) != inner.default_sink.as_deref();
+                        catch_all.as_deref().filter(|_| !deliberate)
+                    });
+                if let Some(target) = target.filter(|t| *t != current) {
+                    moves.push((si.index, target.to_string()));
                 }
             }
             moves
@@ -1590,11 +1623,11 @@ impl PulseManager {
                     }
                 }
             }
-            // App channels and standalone virtual channels both expose a
+            // App, catch-all and standalone virtual channels all expose a
             // selectable device named after the channel; apps can be routed
-            // into it from Crossfade (App) or from the app's own output
-            // device picker / OBS audio capture (both).
-            Some(Assignment::App { .. }) | Some(Assignment::Virtual) => {
+            // into it by Crossfade (App/CatchAll) or from the app's own
+            // output device picker / OBS audio capture (all three).
+            Some(Assignment::App { .. } | Assignment::CatchAll | Assignment::Virtual) => {
                 let sink_name = channel_sink_name(id);
                 let clean = sanitize_desc(channel_name.trim());
                 let desc = if clean.is_empty() {

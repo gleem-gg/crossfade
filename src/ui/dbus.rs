@@ -133,6 +133,7 @@ fn handle(
                     let kind = match &c.assignment {
                         Some(Assignment::Source { .. }) => "source",
                         Some(Assignment::App { .. }) => "app",
+                        Some(Assignment::CatchAll) => "catch_all",
                         Some(Assignment::Virtual) => "virtual",
                         None => "none",
                     };

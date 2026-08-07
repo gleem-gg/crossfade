@@ -1,6 +1,7 @@
 pub mod channel_strip;
 pub mod dbus;
 pub mod effects;
+pub mod input_picker;
 pub mod midi;
 pub mod outputs;
 pub mod setup;

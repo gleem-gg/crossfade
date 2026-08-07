@@ -5,9 +5,10 @@ use std::rc::Rc;
 use adw::prelude::*;
 use gtk::{gdk, gio};
 
-use crate::config::{Assignment, ChannelConfig};
+use crate::config::ChannelConfig;
 
-use super::{label_factory, meter_pair, mute_button, MeterPair};
+use super::input_picker::{InputOptions, InputPicker};
+use super::{meter_pair, mute_button, MeterPair};
 
 /// Fixed width of every channel strip (and the add-channel card).
 pub const STRIP_WIDTH: i32 = 150;
@@ -47,7 +48,7 @@ pub struct ChannelStrip {
     color_swatch: gtk::DrawingArea,
     color_value: Rc<RefCell<Option<gdk::RGBA>>>,
     color_changed: ColorHandler,
-    pub input: gtk::DropDown,
+    pub input: InputPicker,
     level: MeterPair,
     pub monitor_scale: gtk::Scale,
     pub stream_scale: gtk::Scale,
@@ -60,10 +61,6 @@ pub struct ChannelStrip {
     /// Set while the strip is being updated programmatically so signal
     /// handlers know not to write back into the config.
     pub guard: Rc<Cell<bool>>,
-    /// Assignment behind each drop-down position (index-aligned with the
-    /// model). Shared with the selection handler.
-    pub entries: Rc<RefCell<Vec<Option<Assignment>>>>,
-    last_labels: RefCell<Vec<String>>,
 }
 
 fn fader() -> gtk::Scale {
@@ -277,11 +274,7 @@ impl ChannelStrip {
         pop_box.append(&actions);
         popover.set_child(Some(&pop_box));
 
-        let input = gtk::DropDown::builder()
-            .tooltip_text("Select the input for this channel")
-            .build();
-        input.set_factory(Some(&label_factory(9, true)));
-        input.set_list_factory(Some(&label_factory(36, false)));
+        let input = InputPicker::new();
 
         let level = meter_pair();
 
@@ -337,7 +330,7 @@ impl ChannelStrip {
 
         root.append(&header);
         root.append(&color);
-        root.append(&input);
+        root.append(&input.root);
         root.append(&level.root);
         root.append(&faders);
 
@@ -361,8 +354,6 @@ impl ChannelStrip {
             link,
             vod_caption,
             guard: Rc::new(Cell::new(false)),
-            entries: Rc::new(RefCell::new(Vec::new())),
-            last_labels: RefCell::new(Vec::new()),
         }
     }
 
@@ -436,39 +427,13 @@ impl ChannelStrip {
         self.fx.set_tooltip_text(Some(&tip));
     }
 
-    /// Rebuild the input drop-down. `current` is kept selected; if it is not
-    /// in `items` (device unplugged, app not running) a placeholder entry is
-    /// appended so the assignment is not silently lost.
-    pub fn set_input_entries(
+    /// Refresh the input picker against the devices and applications the
+    /// server currently offers.
+    pub fn set_input_options(
         &self,
-        items: &[(String, Option<Assignment>)],
-        current: &Option<Assignment>,
+        options: &InputOptions,
+        current: &Option<crate::config::Assignment>,
     ) {
-        let mut labels: Vec<String> = items.iter().map(|(l, _)| l.clone()).collect();
-        let mut assigns: Vec<Option<Assignment>> = items.iter().map(|(_, a)| a.clone()).collect();
-        let mut selected = assigns.iter().position(|a| a == current);
-        if selected.is_none()
-            && let Some(a) = current {
-                let label = match a {
-                    Assignment::Source { name } => format!("{name} (unavailable)"),
-                    Assignment::App { name } => format!("{name} (not running)"),
-                    Assignment::Virtual => "Virtual Device".to_string(),
-                };
-                labels.push(label);
-                assigns.push(Some(a.clone()));
-                selected = Some(labels.len() - 1);
-            }
-        let selected = selected.unwrap_or(0) as u32;
-        if *self.last_labels.borrow() == labels && self.input.selected() == selected {
-            return;
-        }
-        self.guard.set(true);
-        let strs: Vec<&str> = labels.iter().map(String::as_str).collect();
-        let model = gtk::StringList::new(&strs);
-        self.input.set_model(Some(&model));
-        self.input.set_selected(selected);
-        self.guard.set(false);
-        *self.last_labels.borrow_mut() = labels;
-        *self.entries.borrow_mut() = assigns;
+        self.input.update(options, current);
     }
 }

@@ -6,9 +6,9 @@ use std::time::{Duration, Instant};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::audio::{AudioEvent, LevelTarget, Mix, PulseManager};
+use crate::audio::{AudioEvent, LevelTarget, Mix, PulseManager, SourceEntry};
 use crate::config::{
-    Assignment, Config, MAX_CHANNELS, MidiBinding, MidiKind, MidiSource, MidiTarget,
+    self, Assignment, Config, MAX_CHANNELS, MidiBinding, MidiKind, MidiSource, MidiTarget,
 };
 use crate::midi::{MidiEvent, MidiManager};
 
@@ -16,6 +16,7 @@ use super::channel_strip::ChannelStrip;
 use super::dbus;
 use super::effects::{self, EffectsDeps};
 use super::heading_label;
+use super::input_picker::InputOptions;
 use super::midi as midi_ui;
 use super::outputs::OutputsPanel;
 use super::setup;
@@ -934,34 +935,14 @@ fn open_midi_dialog(app: &Rc<App>) {
 
 fn refresh_devices(app: &Rc<App>) {
     let sources = app.manager.sources();
-    let apps = app.manager.app_names();
-
-    let mut items: Vec<(String, Option<Assignment>)> = vec![
-        ("No Input".to_string(), None),
-        ("Virtual Device".to_string(), Some(Assignment::Virtual)),
-    ];
-    for s in sources.iter().filter(|s| !s.is_monitor) {
-        items.push((
-            s.description.clone(),
-            Some(Assignment::Source {
-                name: s.name.clone(),
-            }),
-        ));
-    }
-    for a in &apps {
-        items.push((
-            format!("{a} — Application"),
-            Some(Assignment::App { name: a.clone() }),
-        ));
-    }
-    for s in sources.iter().filter(|s| s.is_monitor) {
-        items.push((
-            s.description.clone(),
-            Some(Assignment::Source {
-                name: s.name.clone(),
-            }),
-        ));
-    }
+    let running = app.manager.app_names();
+    let device = |s: &SourceEntry| (s.description.clone(), s.name.clone());
+    let base = InputOptions {
+        sources: sources.iter().filter(|s| !s.is_monitor).map(device).collect(),
+        monitors: sources.iter().filter(|s| s.is_monitor).map(device).collect(),
+        apps: running.clone(),
+        ..InputOptions::default()
+    };
 
     let sinks = app.manager.output_sinks();
     let mut sink_items: Vec<(String, Option<String>)> =
@@ -972,10 +953,37 @@ fn refresh_devices(app: &Rc<App>) {
 
     {
         let cfg = app.config.borrow();
+        let catch_all = cfg.catch_all_channel().map(|c| (c.id, c.name.clone()));
         for (id, strip) in app.strips.borrow().iter() {
-            if let Some(ch) = cfg.channel(*id) {
-                strip.set_input_entries(&items, &ch.assignment);
-            }
+            let Some(ch) = cfg.channel(*id) else {
+                continue;
+            };
+            // Apps another channel already captures are shown as taken, so
+            // two channels never fight over the same stream.
+            let claimed: Vec<(String, String)> = running
+                .iter()
+                .filter_map(|a| {
+                    cfg.channels
+                        .iter()
+                        .filter(|c| c.id != *id)
+                        .find(|c| {
+                            c.assignment
+                                .as_ref()
+                                .is_some_and(|x| x.apps().iter().any(|r| config::app_matches(r, a)))
+                        })
+                        .map(|c| (a.clone(), c.name.clone()))
+                })
+                .collect();
+            let options = InputOptions {
+                channel: ch.name.clone(),
+                claimed,
+                catch_all_owner: catch_all
+                    .as_ref()
+                    .filter(|(owner, _)| *owner != *id)
+                    .map(|(_, name)| name.clone()),
+                ..base.clone()
+            };
+            strip.set_input_options(&options, &ch.assignment);
         }
         app.outputs
             .set_output_sinks(&sink_items, &cfg.master.monitor_device);
@@ -1002,7 +1010,11 @@ fn update_sidebar(app: &Rc<App>) {
         Assignment::Source { name } => manager
             .source_description(name)
             .unwrap_or_else(|| name.clone()),
-        Assignment::App { name } => format!("{name} — application"),
+        Assignment::App { apps } => match apps.len() {
+            1 => format!("{} — application", apps[0]),
+            _ => format!("{} — applications", apps.join(", ")),
+        },
+        Assignment::CatchAll => "Every app not assigned to another channel".to_string(),
         Assignment::Virtual => "Virtual device".to_string(),
     });
 }
@@ -1049,6 +1061,12 @@ fn rebuild_add_menu(app: &Rc<App>) {
     }
     app.add_menu
         .append(Some("Custom Channel"), Some("win.add-channel('')"));
+    // The catch-all preset, while no channel holds that role yet.
+    if app.config.borrow().catch_all_channel().is_none() {
+        let section = gio::Menu::new();
+        section.append(Some("Other Apps"), Some("win.add-catch-all"));
+        app.add_menu.append_section(None, &section);
+    }
 }
 
 fn wire_strip(app: &Rc<App>, strip: &ChannelStrip, id: u64) {
@@ -1108,10 +1126,12 @@ fn wire_strip(app: &Rc<App>, strip: &ChannelStrip, id: u64) {
                 if app.rename_epoch.borrow().get(&id) != Some(&epoch) {
                     return;
                 }
-                let needs_sink = matches!(
-                    app.config.borrow().channel(id).and_then(|c| c.assignment.clone()),
-                    Some(Assignment::App { .. }) | Some(Assignment::Virtual)
-                );
+                let needs_sink = app
+                    .config
+                    .borrow()
+                    .channel(id)
+                    .and_then(|c| c.assignment.as_ref())
+                    .is_some_and(Assignment::provides_device);
                 if needs_sink {
                     app.manager.rebuild_channel(id);
                 }
@@ -1121,19 +1141,20 @@ fn wire_strip(app: &Rc<App>, strip: &ChannelStrip, id: u64) {
 
     {
         let app = app.clone();
-        let guard = strip.guard.clone();
-        let entries = strip.entries.clone();
-        strip.input.connect_selected_notify(move |dd| {
-            if guard.get() {
-                return;
-            }
-            let assignment = entries
-                .borrow()
-                .get(dd.selected() as usize)
-                .cloned()
-                .flatten();
-            {
+        strip.input.connect_changed(move |assignment| {
+            // Only one channel can be the catch-all; taking the role hands
+            // the previous holder back its plain virtual device.
+            let displaced = {
                 let mut cfg = app.config.borrow_mut();
+                let displaced = matches!(assignment, Some(Assignment::CatchAll))
+                    .then(|| cfg.catch_all_channel().map(|c| c.id))
+                    .flatten()
+                    .filter(|other| *other != id);
+                if let Some(other) = displaced
+                    && let Some(ch) = cfg.channel_mut(other)
+                {
+                    ch.assignment = Some(Assignment::Virtual);
+                }
                 let Some(ch) = cfg.channel_mut(id) else {
                     return;
                 };
@@ -1141,10 +1162,14 @@ fn wire_strip(app: &Rc<App>, strip: &ChannelStrip, id: u64) {
                     return;
                 }
                 ch.assignment = assignment;
+                displaced
+            };
+            if let Some(other) = displaced {
+                app.manager.rebuild_channel(other);
             }
             app.manager.rebuild_channel(id);
             schedule_save(&app);
-            update_sidebar(&app);
+            refresh_devices(&app);
         });
     }
 
@@ -1741,6 +1766,27 @@ fn wire_actions(app: &Rc<App>, window: &adw::ApplicationWindow) {
         });
     }
     window.add_action(&add);
+
+    let add_catch_all = gio::SimpleAction::new("add-catch-all", None);
+    {
+        let app = app.clone();
+        add_catch_all.connect_activate(move |_, _| {
+            if app.config.borrow().catch_all_channel().is_some() {
+                return;
+            }
+            let id = app
+                .config
+                .borrow_mut()
+                .add_channel_with(Some("Other Apps"), Assignment::CatchAll);
+            if let Some(id) = id {
+                app.manager.rebuild_channel(id);
+                rebuild_strips(&app);
+                schedule_save(&app);
+                update_sidebar(&app);
+            }
+        });
+    }
+    window.add_action(&add_catch_all);
 
     let vod = gio::SimpleAction::new_stateful(
         "vod-mix",
