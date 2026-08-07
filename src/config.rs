@@ -11,15 +11,116 @@ pub const MAX_CHANNELS: usize = 8;
 pub const TEMPLATE_NAMES: [&str; 6] = ["Game", "Music", "Voice Chat", "Browser", "SFX", "Aux"];
 
 /// What feeds an input channel: a capture source (hardware input or a monitor
-/// of another device), an application's playback stream matched by its
-/// `application.name`, or a standalone virtual device ("Crossfade: <name>")
-/// that other software can select as an output.
+/// of another device), a group of applications whose playback streams are
+/// matched by `application.name`, every application no other channel claims,
+/// or a standalone virtual device ("Crossfade: <name>") that other software
+/// can select as an output.
+///
+/// The last three all expose that virtual device — an `App` channel is a
+/// `Virtual` channel that additionally pulls matching streams in, so apps can
+/// be routed into it either by Crossfade or from their own output picker.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Assignment {
-    Source { name: String },
-    App { name: String },
+    Source {
+        name: String,
+    },
+    App {
+        /// Match rules against `application.name`: plain names, or globs with
+        /// `*`/`?` (see [`app_matches`]). Never empty — a channel left
+        /// without rules is stored as `Virtual`.
+        #[serde(default, alias = "name", deserialize_with = "names")]
+        apps: Vec<String>,
+    },
+    /// Picks up every playback stream not claimed by an `App` channel and not
+    /// deliberately pointed at one of Crossfade's own devices.
+    CatchAll,
     Virtual,
+}
+
+impl Assignment {
+    /// Whether this kind exposes a "Crossfade: <name>" output device of its
+    /// own (and therefore needs a per-channel null sink).
+    pub fn provides_device(&self) -> bool {
+        matches!(
+            self,
+            Assignment::App { .. } | Assignment::CatchAll | Assignment::Virtual
+        )
+    }
+
+    /// The channel's app match rules; empty for every other kind.
+    pub fn apps(&self) -> &[String] {
+        match self {
+            Assignment::App { apps } => apps,
+            _ => &[],
+        }
+    }
+}
+
+/// Deserializes an app rule list, also accepting the pre-0.9 single-app form
+/// (`"kind": "app", "name": "Spotify"`) as a one-element list.
+fn names<'de, D>(d: D) -> Result<Vec<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct Visitor;
+    impl<'de> serde::de::Visitor<'de> for Visitor {
+        type Value = Vec<String>;
+
+        fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+            f.write_str("an application name or a list of names")
+        }
+
+        fn visit_str<E: serde::de::Error>(self, v: &str) -> Result<Self::Value, E> {
+            Ok(vec![v.to_string()])
+        }
+
+        fn visit_seq<A: serde::de::SeqAccess<'de>>(
+            self,
+            mut seq: A,
+        ) -> Result<Self::Value, A::Error> {
+            let mut out = Vec::new();
+            while let Some(s) = seq.next_element::<String>()? {
+                out.push(s);
+            }
+            Ok(out)
+        }
+    }
+    d.deserialize_any(Visitor)
+}
+
+/// Does an app match rule contain wildcards?
+pub fn is_pattern(rule: &str) -> bool {
+    rule.contains(['*', '?'])
+}
+
+/// Match one app rule against an `application.name`. Rules are matched
+/// case-insensitively; `*` stands for any sequence of characters and `?` for
+/// exactly one, so "Firefox*" catches both "Firefox" and "Firefox Nightly".
+pub fn app_matches(rule: &str, app: &str) -> bool {
+    let rule: Vec<char> = rule.to_lowercase().chars().collect();
+    let app: Vec<char> = app.to_lowercase().chars().collect();
+    let (mut r, mut a) = (0, 0);
+    // Backtracking point: the last '*' seen and how much of `app` it had
+    // already swallowed when we walked past it.
+    let (mut star, mut swallowed) = (None, 0);
+    while a < app.len() {
+        if r < rule.len() && (rule[r] == '?' || rule[r] == app[a]) {
+            r += 1;
+            a += 1;
+        } else if r < rule.len() && rule[r] == '*' {
+            star = Some(r);
+            swallowed = a;
+            r += 1;
+        } else if let Some(s) = star {
+            swallowed += 1;
+            a = swallowed;
+            r = s + 1;
+        } else {
+            return false;
+        }
+    }
+    rule[r..].iter().all(|c| *c == '*')
 }
 
 /// One LV2 plugin instance in a channel's effect chain.
@@ -537,6 +638,9 @@ impl Config {
 
         let mut seen: HashSet<u64> = HashSet::new();
         let mut max_id = 0;
+        // Only the first catch-all channel keeps that role; a second one
+        // would silently never see a stream.
+        let mut catch_all_taken = false;
         for ch in &mut cfg.channels {
             if ch.id == 0 || seen.contains(&ch.id) {
                 ch.id = cfg.next_channel_id.max(max_id + 1);
@@ -556,6 +660,25 @@ impl Config {
             // Hand-edited colors that are not "#rrggbb" are dropped.
             if ch.color.is_some() && ch.color_rgb().is_none() {
                 ch.color = None;
+            }
+            match &mut ch.assignment {
+                Some(Assignment::App { apps }) => {
+                    for a in apps.iter_mut() {
+                        *a = a.trim().to_string();
+                    }
+                    let mut seen_apps: HashSet<String> = HashSet::new();
+                    apps.retain(|a| !a.is_empty() && seen_apps.insert(a.to_lowercase()));
+                    // No rules left: that is exactly a virtual device.
+                    if apps.is_empty() {
+                        ch.assignment = Some(Assignment::Virtual);
+                    }
+                }
+                Some(Assignment::CatchAll)
+                    if std::mem::replace(&mut catch_all_taken, true) =>
+                {
+                    ch.assignment = Some(Assignment::Virtual);
+                }
+                _ => {}
             }
             // Repair effect/VST ids the same way as channel ids (they share
             // one id space per channel).
@@ -652,9 +775,24 @@ impl Config {
             .collect()
     }
 
+    /// The channel picking up everything no other channel claims, if any.
+    pub fn catch_all_channel(&self) -> Option<&ChannelConfig> {
+        self.channels
+            .iter()
+            .find(|c| matches!(c.assignment, Some(Assignment::CatchAll)))
+    }
+
     /// Add a channel (as a virtual device by default). Returns its id, or
     /// `None` when the channel limit is reached.
     pub fn add_channel(&mut self, name: Option<&str>) -> Option<u64> {
+        self.add_channel_with(name, Assignment::Virtual)
+    }
+
+    pub fn add_channel_with(
+        &mut self,
+        name: Option<&str>,
+        assignment: Assignment,
+    ) -> Option<u64> {
         if self.channels.len() >= MAX_CHANNELS {
             return None;
         }
@@ -667,7 +805,7 @@ impl Config {
         self.channels.push(ChannelConfig {
             id,
             name,
-            assignment: Some(Assignment::Virtual),
+            assignment: Some(assignment),
             // Muted towards the audience/recording until deliberately
             // unmuted, so a fresh channel never leaks audio into the
             // stream or VOD tracks.
@@ -680,5 +818,44 @@ impl Config {
 
     pub fn remove_channel(&mut self, id: u64) {
         self.channels.retain(|c| c.id != id || c.permanent);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn app_assignments_survive_the_single_app_format() {
+        let legacy: Assignment =
+            serde_json::from_str(r#"{"kind":"app","name":"Spotify"}"#).unwrap();
+        assert_eq!(
+            legacy,
+            Assignment::App {
+                apps: vec!["Spotify".to_string()]
+            }
+        );
+        let current: Assignment =
+            serde_json::from_str(r#"{"kind":"app","apps":["Spotify","Firefox*"]}"#).unwrap();
+        assert_eq!(
+            serde_json::to_string(&current).unwrap(),
+            r#"{"kind":"app","apps":["Spotify","Firefox*"]}"#
+        );
+        assert_eq!(
+            serde_json::from_str::<Assignment>(r#"{"kind":"catch_all"}"#).unwrap(),
+            Assignment::CatchAll
+        );
+    }
+
+    #[test]
+    fn rules_match_case_insensitively_with_wildcards() {
+        assert!(app_matches("Firefox", "firefox"));
+        assert!(app_matches("Firefox*", "Firefox Nightly"));
+        assert!(app_matches("*chrom*", "Google Chrome"));
+        assert!(app_matches("a?c", "ABC"));
+        assert!(app_matches("*", "anything"));
+        assert!(!app_matches("Firefox", "Firefox Nightly"));
+        assert!(!app_matches("*fox", "Firefox Nightly"));
+        assert!(!app_matches("a?c", "ac"));
     }
 }

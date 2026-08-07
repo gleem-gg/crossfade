@@ -55,7 +55,7 @@ fn system_channel(config: &Config) -> Option<&ChannelConfig> {
             config
                 .channels
                 .iter()
-                .find(|c| matches!(c.assignment, Some(Assignment::Virtual)))
+                .find(|c| c.assignment.as_ref().is_some_and(Assignment::provides_device))
         })
 }
 
@@ -66,7 +66,8 @@ fn mic_channel(config: &Config) -> Option<&ChannelConfig> {
         .find(|c| c.permanent && c.name == "Microphone")
         .or_else(|| {
             config.channels.iter().find(|c| {
-                c.permanent && !matches!(c.assignment, Some(Assignment::Virtual))
+                c.permanent
+                    && !c.assignment.as_ref().is_some_and(Assignment::provides_device)
             })
         })
 }
@@ -77,7 +78,9 @@ pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
 
     if let Some(sys) = system_channel(config) {
         let sink = audio::channel_sink_name(sys.id);
-        let assigned = matches!(sys.assignment, Some(Assignment::Virtual));
+        // Any kind that exposes the channel's own device will do — virtual,
+        // app group or catch-all.
+        let assigned = sys.assignment.as_ref().is_some_and(Assignment::provides_device);
         items.push(SetupItem {
             title: "Sound Output",
             subtitle: format!(
