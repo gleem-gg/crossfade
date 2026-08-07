@@ -1,5 +1,5 @@
 Name:           gleem-crossfade
-Version:        0.8.0
+Version:        0.9.0
 Release:        1%{?dist}
 Summary:        Dual-mix virtual audio mixer for PipeWire
 License:        MIT
@@ -76,6 +76,14 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/gg.gleem.Crossfade.de
 %{_datadir}/icons/hicolor/scalable/apps/gg.gleem.Crossfade.svg
 
 %changelog
+* Fri Aug 07 2026 René Preuß <hello@ghostzero.de> - 0.9.0-1
+- Application channels can capture several apps at once, by name or by
+  pattern (e.g. Firefox*), and are selectable output devices at the same time
+- New "Other Apps" channel kind: a catch-all for every playback stream no
+  other channel claims
+- Tray indicator (StatusNotifierItem) with microphone mute state and
+  toggle, show window and quit
+
 * Wed Jul 29 2026 René Preuß <hello@ghostzero.de> - 0.8.0-1
 - Renamed to Gleem Crossfade: new binary gleem-crossfade, app id
   gg.gleem.Crossfade, D-Bus API gg.gleem.Crossfade.Mixer1, virtual

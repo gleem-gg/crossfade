@@ -1,6 +1,6 @@
 [package]
 name = "gleem-crossfade"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2024"
 description = "Dual-mix virtual audio mixer for streaming"
 license = "MIT"

@@ -33,15 +33,20 @@ VOD/recording stays free of DMCA-problematic audio.
 - **Dynamic input channels** (up to 8): starts with *Microphone* and
   *System*; add more (Game, Music, Voice Chat, Browser, SFX, Aux, or custom
   names) with the **+** card, remove them again anytime.
-- **Three kinds of channel inputs:**
+- **Four kinds of channel inputs:**
   - *Capture sources* — microphones, line-ins, or monitors of other devices.
-  - *Applications* — running playback streams, matched by application name
-    and moved into the channel automatically.
+  - *Applications* — tick as many running apps as you like per channel, or
+    add a pattern such as `Firefox*`, and their playback streams are moved
+    into the channel automatically. One fader can hold a game, its launcher
+    and its voice chat.
+  - *Other Apps* — a catch-all channel that picks up every app no other
+    channel claims, so nothing slips past the mixer unnoticed.
   - *Virtual devices* — the channel appears as a selectable output device
     named `Crossfade: <channel>`. Point Discord's output at
     `Crossfade: Voice Chat`, or set `Crossfade: System` as your system
     default output; OBS can also capture these devices directly ("Audio
-    Output Capture (PulseAudio)").
+    Output Capture (PulseAudio)"). Application channels are virtual devices
+    too, so both routes work at once.
 - **Per-channel effects**: insert **VST2/VST3 and LV2 plugins** (noise
   suppression, gates, compressors, EQs, …) on any input — browsed, ordered,
   bypassed, and tweaked with live parameter sliders entirely inside
@@ -70,6 +75,10 @@ VOD/recording stays free of DMCA-problematic audio.
 - **Background operation**: closing the window keeps the virtual devices
   running; enable *Start at Login* in the main menu and Crossfade launches
   hidden on login, so your audio setup is always ready.
+- **Tray indicator**: a status icon shows at a glance whether your
+  microphone is muted, toggles it, brings the window back and quits. Needs a
+  StatusNotifierItem host — native on KDE, Cinnamon, Xfce and bars like
+  Waybar; on GNOME install the AppIndicator extension.
 - Configuration persists across restarts at
   `~/.config/gleem-crossfade/config.json`.
 

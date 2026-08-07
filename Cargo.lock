@@ -259,7 +259,7 @@ dependencies = [
 
 [[package]]
 name = "gleem-crossfade"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "alsa",
  "glib-build-tools",
