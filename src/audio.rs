@@ -58,6 +58,14 @@ fn is_wave_xlr(name: &str, description: &str) -> bool {
     description.contains("Wave XLR") || n.contains("wave_xlr") || n.contains("wave-xlr")
 }
 
+/// Does this device belong to any Elgato Wave USB interface (Wave XLR,
+/// Wave:1, Wave:3, Wave Neo)? Descriptions read "Elgato Wave 3 Mono", names
+/// "alsa_input.usb-Elgato_Systems_Elgato_Wave_3_…".
+fn is_elgato_wave(name: &str, description: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    description.contains("Elgato Wave") || n.contains("elgato_wave") || n.contains("elgato-wave")
+}
+
 /// Strip characters that would break PulseAudio module argument quoting.
 fn sanitize_desc(s: &str) -> String {
     s.chars()
@@ -660,24 +668,43 @@ impl PulseManager {
 
     /// The Wave XLR's capture device ("Elgato Wave XLR Mono"), if connected.
     pub fn wave_xlr_source(&self) -> Option<SourceEntry> {
-        let inner = self.inner.borrow();
-        let mut matches = inner.sources.iter().filter(|s| {
-            !s.is_monitor
-                && !s.name.starts_with(OWN_PREFIX)
-                && is_wave_xlr(&s.name, &s.description)
-        });
-        matches.next().cloned()
+        self.find_capture(is_wave_xlr)
     }
 
     /// The Wave XLR's output device ("Elgato Wave XLR Analog Stereo"), if
     /// connected.
     pub fn wave_xlr_sink(&self) -> Option<SinkEntry> {
+        self.find_playback(is_wave_xlr)
+    }
+
+    /// The capture device of any connected Elgato Wave interface.
+    pub fn wave_source(&self) -> Option<SourceEntry> {
+        self.find_capture(is_elgato_wave)
+    }
+
+    /// The output device of any connected Elgato Wave interface.
+    pub fn wave_sink(&self) -> Option<SinkEntry> {
+        self.find_playback(is_elgato_wave)
+    }
+
+    fn find_capture(&self, matches: fn(&str, &str) -> bool) -> Option<SourceEntry> {
+        let inner = self.inner.borrow();
+        inner
+            .sources
+            .iter()
+            .find(|s| {
+                !s.is_monitor && !s.name.starts_with(OWN_PREFIX) && matches(&s.name, &s.description)
+            })
+            .cloned()
+    }
+
+    fn find_playback(&self, matches: fn(&str, &str) -> bool) -> Option<SinkEntry> {
         let inner = self.inner.borrow();
         inner
             .sinks
             .iter()
             .map(|(_, e)| e)
-            .find(|e| !e.name.starts_with(OWN_PREFIX) && is_wave_xlr(&e.name, &e.description))
+            .find(|e| !e.name.starts_with(OWN_PREFIX) && matches(&e.name, &e.description))
             .cloned()
     }
 
@@ -1157,7 +1184,7 @@ impl PulseManager {
     /// Wire channels parked on a capture device that has now appeared. If
     /// the monitor output plays (or is configured to play) on the same card,
     /// tear it down first and let the deferral logic recreate it once the
-    /// capture loopbacks run: the Wave XLR's firmware delivers a silent mic
+    /// capture loopbacks run: the Wave's firmware delivers a silent mic
     /// when its playback stream is opened before its capture stream.
     fn check_pending_sources(rc: &Rc<RefCell<Inner>>) {
         let (ready_ids, bounce) = {
@@ -2377,5 +2404,30 @@ impl PulseManager {
         if ok {
             rc.borrow_mut().peaks.insert(target, stream);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wave_device_matching() {
+        let wave3 = (
+            "alsa_input.usb-Elgato_Systems_Elgato_Wave_3_0000000000-00.mono-fallback",
+            "Elgato Wave 3 Mono",
+        );
+        let xlr = (
+            "alsa_output.usb-Elgato_Systems_Elgato_Wave_XLR_0000000000-00.analog-stereo",
+            "Elgato Wave XLR Analog Stereo",
+        );
+        let other = ("alsa_output.pci-0000_00_1f.3.analog-stereo", "Built-in Audio");
+
+        assert!(is_elgato_wave(wave3.0, wave3.1));
+        assert!(is_elgato_wave(xlr.0, xlr.1));
+        assert!(!is_elgato_wave(other.0, other.1));
+
+        assert!(is_wave_xlr(xlr.0, xlr.1));
+        assert!(!is_wave_xlr(wave3.0, wave3.1));
     }
 }
