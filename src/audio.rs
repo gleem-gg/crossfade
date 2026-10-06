@@ -2356,9 +2356,8 @@ impl PulseManager {
                         match st.peek() {
                             Ok(PeekResult::Data(data)) => {
                                 for frame in data.chunks_exact(4 * n) {
-                                    for (i, chunk) in frame.chunks_exact(4).enumerate() {
-                                        let v = f32::from_ne_bytes(chunk.try_into().unwrap())
-                                            .abs();
+                                    for (i, chunk) in frame.as_chunks::<4>().0.iter().enumerate() {
+                                        let v = f32::from_ne_bytes(*chunk).abs();
                                         if v > peaks[i] {
                                             peaks[i] = v;
                                         }
