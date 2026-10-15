@@ -1,6 +1,6 @@
 //! Audio setup assistant: checks that the system routes audio through
-//! Crossfade (default output/input devices, and — when an Elgato Wave XLR is
-//! connected — the microphone channel and monitor output), offering one-click
+//! Crossfade (default output/input devices, and — when an Elgato Wave interface
+//! is connected — the microphone channel and monitor output), offering one-click
 //! fixes. Shown automatically on first run; later launches only surface a
 //! notice when something drifted.
 
@@ -40,9 +40,9 @@ enum SetupFix {
     },
     /// Make the system record from the "Crossfade Stream Mix" microphone.
     DefaultSource { source: String },
-    /// Feed the Microphone channel from the Wave XLR capture device.
+    /// Feed the Microphone channel from the Elgato Wave capture device.
     MicAssignment { channel_id: u64, source: String },
-    /// Play the monitor mix on the Wave XLR output.
+    /// Play the monitor mix on the Elgato Wave output.
     MonitorDevice { sink: String },
 }
 
@@ -108,7 +108,7 @@ pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
         },
     });
 
-    if let Some(src) = manager.wave_xlr_source()
+    if let Some(src) = manager.wave_source()
         && let Some(mic) = mic_channel(config)
     {
         let want = Assignment::Source {
@@ -125,7 +125,7 @@ pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
         });
     }
 
-    if let Some(sink) = manager.wave_xlr_sink() {
+    if let Some(sink) = manager.wave_sink() {
         items.push(SetupItem {
             title: "Monitor Output",
             subtitle: format!("Play the Monitor Mix on “{}”", sink.description),
