@@ -149,6 +149,8 @@ impl ChannelStrip {
             .build();
         fx.add_css_class("flat");
         fx.add_css_class("circular");
+        // Effect chains (LV2 via PipeWire, VST via Carla) are Linux-only.
+        fx.set_visible(cfg!(target_os = "linux"));
 
         let header = gtk::Box::new(gtk::Orientation::Horizontal, 4);
         header.append(&name);

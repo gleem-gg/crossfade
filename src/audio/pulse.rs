@@ -31,6 +31,7 @@ use pulse::sample::{Format, Spec};
 use pulse::stream::{FlagSet as StreamFlagSet, PeekResult, Stream};
 use pulse::volume::{ChannelVolumes, Volume};
 
+use super::{is_wave_xlr, AudioEvent, LevelTarget, Mix, SinkEntry, SourceEntry};
 use crate::config::{self, Assignment, ChannelConfig, Config, MasterConfig};
 use crate::fx::{self, FxEvent, FxManager};
 use crate::lv2;
@@ -52,10 +53,14 @@ pub fn channel_sink_name(id: u64) -> String {
     format!("{OWN_PREFIX}Ch{id}")
 }
 
-/// Does this device name/description belong to an Elgato Wave XLR?
-fn is_wave_xlr(name: &str, description: &str) -> bool {
-    let n = name.to_ascii_lowercase();
-    description.contains("Wave XLR") || n.contains("wave_xlr") || n.contains("wave-xlr")
+/// Description of a channel's own sink ("Crossfade: <name>").
+fn channel_sink_description(id: u64, channel_name: &str) -> String {
+    let clean = sanitize_desc(channel_name.trim());
+    if clean.is_empty() {
+        format!("Crossfade Channel {id}")
+    } else {
+        format!("Crossfade: {clean}")
+    }
 }
 
 /// Does this device belong to any Elgato Wave USB interface (Wave XLR,
@@ -85,90 +90,12 @@ fn loopback_args(source: &str, sink: &str, tag: &str) -> String {
     )
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, serde::Serialize, serde::Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum Mix {
-    Monitor,
-    Stream,
-    /// Optional third bus for a VOD-safe recording track.
-    Vod,
-}
-
-impl Mix {
-    pub fn label(&self) -> &'static str {
-        match self {
-            Mix::Monitor => "Monitor",
-            Mix::Stream => "Stream",
-            Mix::Vod => "VOD",
-        }
-    }
-
-    /// Parse the serde/D-Bus name ("monitor" | "stream" | "vod").
-    pub fn from_key(key: &str) -> Option<Mix> {
-        match key {
-            "monitor" => Some(Mix::Monitor),
-            "stream" => Some(Mix::Stream),
-            "vod" => Some(Mix::Vod),
-            _ => None,
-        }
-    }
-}
-
 /// Addresses one managed loopback, for the fast post-load volume apply.
 #[derive(Clone, Copy)]
 enum LoopbackRef {
     Mix(u64, Mix),
     Input(u64),
     MonitorOut,
-}
-
-#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-pub enum LevelTarget {
-    Channel(u64),
-    MonitorMix,
-    StreamMix,
-    VodMix,
-}
-
-#[derive(Clone, Debug)]
-pub enum AudioEvent {
-    /// Connected and both virtual mix sinks exist.
-    Ready,
-    Failed(String),
-    DevicesChanged,
-    /// Peak levels per channel (one entry for mono, two for stereo).
-    Level(LevelTarget, Vec<f64>),
-    /// A channel's VST rack finished (re)loading; parameter info changed.
-    VstChanged(u64),
-    /// VST parameters were edited from a plugin's own window and written
-    /// into the config: (channel, [(plugin cfg_id, param index, value)]).
-    /// The config should be persisted and open dialog sliders updated.
-    VstParams(u64, Vec<(u64, u32, f64)>),
-}
-
-#[derive(Clone, Debug)]
-pub struct SourceEntry {
-    pub name: String,
-    pub description: String,
-    pub is_monitor: bool,
-    /// Current device volume in percent (avg across channels).
-    pub volume: f64,
-    pub channels: u8,
-    /// Server-side index, for matching capture streams to their device.
-    pub index: u32,
-    /// Owning sound card, for same-card checks against sinks.
-    pub card: Option<u32>,
-}
-
-#[derive(Clone, Debug)]
-pub struct SinkEntry {
-    pub name: String,
-    pub description: String,
-    /// Current device volume in percent (avg across channels).
-    pub volume: f64,
-    pub channels: u8,
-    /// Owning sound card, for same-card checks against sources.
-    pub card: Option<u32>,
 }
 
 #[derive(Clone, Debug)]
@@ -610,6 +537,25 @@ impl PulseManager {
 
     pub fn has_source(&self, name: &str) -> bool {
         self.inner.borrow().sources.iter().any(|s| s.name == name)
+    }
+
+    /// Device name of the output device a channel exposes (when its
+    /// assignment provides one).
+    pub fn channel_sink(&self, id: u64) -> Option<String> {
+        Some(channel_sink_name(id))
+    }
+
+    /// How the channel's own output device is called in other apps.
+    pub fn channel_device_label(&self, id: u64) -> String {
+        let inner = self.inner.borrow();
+        let cfg = inner.config.borrow();
+        let name = cfg.channel(id).map(|c| c.name.as_str()).unwrap_or_default();
+        channel_sink_description(id, name)
+    }
+
+    /// Device name of the "Crossfade Stream Mix" microphone.
+    pub fn stream_mic(&self) -> Option<String> {
+        Some(STREAM_MIC.to_string())
     }
 
     pub fn set_default_sink(&self, name: &str) {
@@ -1656,12 +1602,7 @@ impl PulseManager {
             // output device picker / OBS audio capture (all three).
             Some(Assignment::App { .. } | Assignment::CatchAll | Assignment::Virtual) => {
                 let sink_name = channel_sink_name(id);
-                let clean = sanitize_desc(channel_name.trim());
-                let desc = if clean.is_empty() {
-                    format!("Crossfade Channel {id}")
-                } else {
-                    format!("Crossfade: {clean}")
-                };
+                let desc = channel_sink_description(id, &channel_name);
                 let args = format!(
                     "sink_name={sink_name} sink_properties='device.description=\"{desc}\"'"
                 );

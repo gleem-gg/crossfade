@@ -1,11 +1,16 @@
 pub mod channel_strip;
 pub mod dbus;
+#[cfg(target_os = "linux")]
 pub mod effects;
 pub mod input_picker;
 pub mod midi;
 pub mod outputs;
 pub mod setup;
 pub mod sidebar;
+#[cfg(target_os = "linux")]
+pub mod tray;
+#[cfg(windows)]
+#[path = "tray_win.rs"]
 pub mod tray;
 pub mod wave_xlr;
 pub mod window;
