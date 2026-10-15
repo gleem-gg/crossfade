@@ -2,7 +2,7 @@ Name:           gleem-crossfade
 Version:        0.9.0
 Release:        1%{?dist}
 Summary:        Dual-mix virtual audio mixer for PipeWire
-License:        MIT
+License:        Apache-2.0
 URL:            https://github.com/gleem-gg/crossfade
 Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
 # Created with `cargo vendor` (see .copr/Makefile in the repository)

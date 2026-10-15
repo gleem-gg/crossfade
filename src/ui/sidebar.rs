@@ -3,7 +3,7 @@ use std::cell::RefCell;
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::config::{Assignment, Config};
+use crate::config::{Assignment, ChannelConfig, Config};
 
 /// Sidebar summarizing the virtual devices and what feeds each channel.
 pub struct Sidebar {
@@ -80,7 +80,7 @@ impl Sidebar {
         &self,
         config: &Config,
         monitor_device_label: &str,
-        describe: &dyn Fn(&Assignment) -> String,
+        describe: &dyn Fn(&ChannelConfig) -> String,
     ) {
         self.monitor_row
             .set_subtitle(&format!("Routed to {monitor_device_label}"));
@@ -102,13 +102,10 @@ impl Sidebar {
             row.set_title(&glib::markup_escape_text(&ch.name));
             let subtitle = match &ch.assignment {
                 None => "No input".to_string(),
-                Some(Assignment::Virtual) => {
-                    format!("Virtual device — “Crossfade: {}”", ch.name)
-                }
                 Some(Assignment::CatchAll) => {
                     "Every app not assigned to another channel".to_string()
                 }
-                Some(a) => describe(a),
+                Some(_) => describe(ch),
             };
             row.set_subtitle(&glib::markup_escape_text(&subtitle));
         }
