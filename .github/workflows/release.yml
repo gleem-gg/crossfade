@@ -78,7 +78,7 @@ jobs:
                   inline: true}
                ],
                image: {url: "https://raw.githubusercontent.com/gleem-gg/crossfade/main/img.png"},
-               footer: {text: "Gleem Crossfade — dual-mix virtual audio mixer for Linux • MIT"},
+               footer: {text: "Gleem Crossfade — dual-mix virtual audio mixer for Linux • Apache-2.0"},
                timestamp: $ts
              }]}' \
           | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"

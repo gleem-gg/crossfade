@@ -6,7 +6,7 @@ use std::time::{Duration, Instant};
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::audio::{AudioEvent, LevelTarget, Mix, PulseManager, SourceEntry};
+use crate::audio::{AudioEvent, LevelTarget, Mix, AudioManager, SourceEntry};
 use crate::config::{
     self, Assignment, Config, MAX_CHANNELS, MidiBinding, MidiKind, MidiSource, MidiTarget,
 };
@@ -14,6 +14,7 @@ use crate::midi::{MidiEvent, MidiManager};
 
 use super::channel_strip::ChannelStrip;
 use super::dbus;
+#[cfg(target_os = "linux")]
 use super::effects::{self, EffectsDeps};
 use super::heading_label;
 use super::input_picker::InputOptions;
@@ -45,7 +46,7 @@ struct PickupState {
 
 struct App {
     config: Rc<RefCell<Config>>,
-    manager: PulseManager,
+    manager: AudioManager,
     midi: MidiManager,
     window: glib::WeakRef<adw::ApplicationWindow>,
     toasts: adw::ToastOverlay,
@@ -63,6 +64,7 @@ struct App {
     rename_epoch: RefCell<HashMap<u64, u64>>,
     /// The open effects dialog (channel id + hooks), so VST rack load
     /// results and native-UI parameter edits can update it live.
+    #[cfg(target_os = "linux")]
     fx_dialog: RefCell<Option<(u64, Rc<effects::DialogHooks>)>>,
     /// Refresh hook of the open setup dialog, driven by device changes.
     setup_hook: RefCell<Option<Rc<dyn Fn()>>>,
@@ -93,7 +95,7 @@ struct App {
 
 pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
     let config = Rc::new(RefCell::new(Config::load()));
-    let manager = PulseManager::new(config.clone());
+    let manager = AudioManager::new(config.clone());
     let outputs = OutputsPanel::new();
     let sidebar = Sidebar::new();
 
@@ -257,6 +259,7 @@ pub fn build(application: &adw::Application) -> adw::ApplicationWindow {
         error_page,
         save_pending: Cell::new(false),
         rename_epoch: RefCell::new(HashMap::new()),
+        #[cfg(target_os = "linux")]
         fx_dialog: RefCell::new(None),
         setup_hook: RefCell::new(None),
         setup_prompted: Cell::new(false),
@@ -407,6 +410,7 @@ fn wire_audio_events(app: &Rc<App>) {
                 LevelTarget::StreamMix => app.outputs.stream_level.set_levels(&v),
                 LevelTarget::VodMix => app.outputs.vod_level.set_levels(&v),
             },
+            #[cfg(target_os = "linux")]
             AudioEvent::VstChanged(id) => {
                 let hooks = app
                     .fx_dialog
@@ -418,6 +422,7 @@ fn wire_audio_events(app: &Rc<App>) {
                     (hooks.refresh)();
                 }
             }
+            #[cfg(target_os = "linux")]
             AudioEvent::VstParams(id, updates) => {
                 schedule_save(&app);
                 let hooks = app
@@ -430,6 +435,8 @@ fn wire_audio_events(app: &Rc<App>) {
                     (hooks.sync_params)(&updates);
                 }
             }
+            #[cfg(not(target_os = "linux"))]
+            AudioEvent::VstChanged(_) | AudioEvent::VstParams(..) => {}
         }
     });
 }
@@ -1009,7 +1016,7 @@ fn refresh_devices(app: &Rc<App>) {
                 })
                 .collect();
             let options = InputOptions {
-                channel: ch.name.clone(),
+                device: app.manager.channel_device_label(*id),
                 claimed,
                 catch_all_owner: catch_all
                     .as_ref()
@@ -1040,16 +1047,19 @@ fn update_sidebar(app: &Rc<App>) {
         })
         .unwrap_or_else(|| "system default output".to_string());
     let manager = app.manager.clone();
-    app.sidebar.update(&cfg, &monitor_label, &move |a| match a {
-        Assignment::Source { name } => manager
+    app.sidebar.update(&cfg, &monitor_label, &move |ch| match &ch.assignment {
+        None => "No input".to_string(),
+        Some(Assignment::Source { name }) => manager
             .source_description(name)
             .unwrap_or_else(|| name.clone()),
-        Assignment::App { apps } => match apps.len() {
+        Some(Assignment::App { apps }) => match apps.len() {
             1 => format!("{} — application", apps[0]),
             _ => format!("{} — applications", apps.join(", ")),
         },
-        Assignment::CatchAll => "Every app not assigned to another channel".to_string(),
-        Assignment::Virtual => "Virtual device".to_string(),
+        Some(Assignment::CatchAll) => "Every app not assigned to another channel".to_string(),
+        Some(Assignment::Virtual) => {
+            format!("Virtual device — “{}”", manager.channel_device_label(ch.id))
+        }
     });
 }
 
@@ -1373,6 +1383,7 @@ fn wire_strip(app: &Rc<App>, strip: &ChannelStrip, id: u64) {
         });
     }
 
+    #[cfg(target_os = "linux")]
     {
         let app = app.clone();
         strip.fx.connect_clicked(move |btn| {
@@ -1721,63 +1732,18 @@ fn enforce_xlr_volume(
 
 // ---- Window actions -------------------------------------------------------------
 
-// ---- Autostart -------------------------------------------------------------
-
-fn autostart_file() -> std::path::PathBuf {
-    glib::user_config_dir()
-        .join("autostart")
-        .join(format!("{}.desktop", crate::APP_ID))
-}
-
-fn autostart_enabled() -> bool {
-    autostart_file().exists()
-}
-
-/// Enable/disable launch-on-login via an XDG autostart entry. The entry runs
-/// the current executable with --hidden so the virtual devices come up in
-/// the background without opening the window.
-pub(crate) fn set_autostart(enable: bool) -> std::io::Result<()> {
-    let path = autostart_file();
-    if !enable {
-        if path.exists() {
-            std::fs::remove_file(&path)?;
-        }
-        return Ok(());
-    }
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    let exe = std::env::current_exe()
-        .map(|p| p.display().to_string())
-        .unwrap_or_else(|_| "gleem-crossfade".to_string());
-    std::fs::write(
-        &path,
-        format!(
-            "[Desktop Entry]\n\
-             Type=Application\n\
-             Name=Gleem Crossfade\n\
-             Comment=Dual-mix virtual audio mixer for streaming\n\
-             Exec={exe} --hidden\n\
-             Icon={}\n\
-             Terminal=false\n\
-             X-GNOME-Autostart-enabled=true\n",
-            crate::APP_ID
-        ),
-    )
-}
-
 fn wire_actions(app: &Rc<App>, window: &adw::ApplicationWindow) {
     let autostart = gio::SimpleAction::new_stateful(
         "autostart",
         None,
-        &autostart_enabled().to_variant(),
+        &crate::platform::autostart_enabled().to_variant(),
     );
     autostart.connect_activate(|action, _| {
         let enable = !action
             .state()
             .and_then(|s| s.get::<bool>())
             .unwrap_or(false);
-        match set_autostart(enable) {
+        match crate::platform::set_autostart(enable) {
             Ok(()) => action.set_state(&enable.to_variant()),
             Err(e) => eprintln!("gleem-crossfade: could not update autostart entry: {e}"),
         }
@@ -1877,14 +1843,18 @@ fn wire_actions(app: &Rc<App>, window: &adw::ApplicationWindow) {
                 .application_name("Gleem Crossfade")
                 .application_icon("gg.gleem.Crossfade")
                 .developer_name("René Preuß")
-                .copyright("© 2026 René Preuß")
+                // libadwaita renders the Legal page as Pango markup without
+                // escaping it; a bare "&" would leave the page empty.
+                .copyright(glib::markup_escape_text(
+                    "© 2026 Anikeen UG (haftungsbeschränkt) & Co. KG",
+                ))
                 .version(env!("CARGO_PKG_VERSION"))
                 .comments(
-                    "Dual-mix virtual audio mixer for Linux. \
+                    "Dual-mix virtual audio mixer. \
                      Route hardware inputs and applications into independent \
                      monitor and stream mixes.",
                 )
-                .license_type(gtk::License::MitX11)
+                .license_type(gtk::License::Apache20)
                 .build();
             dialog.present(Some(&win));
         }

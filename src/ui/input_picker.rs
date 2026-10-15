@@ -22,8 +22,9 @@ type ChangeHandler = RefCell<Option<Rc<dyn Fn(Option<Assignment>)>>>;
 /// the bits of config that decide whether a row is available.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct InputOptions {
-    /// This channel's name, for the "Crossfade: <name>" subtitle.
-    pub channel: String,
+    /// What this channel's own output device is called in other apps
+    /// ("Crossfade: Game" on Linux, the driver endpoint's name on Windows).
+    pub device: String,
     /// Capture devices as (description, source name).
     pub sources: Vec<(String, String)>,
     /// Monitors of output devices, same shape.
@@ -321,7 +322,7 @@ impl Inner {
             .append(&self.choice_row("No Input", "", current.is_none(), true, None));
         self.inputs.append(&self.choice_row(
             "Virtual Device",
-            &format!("Selectable as “Crossfade: {}”", opts.channel),
+            &format!("Selectable as “{}”", opts.device),
             is_virtual,
             true,
             Some(Assignment::Virtual),
@@ -460,7 +461,7 @@ impl Inner {
         match current {
             None => "No input".to_string(),
             Some(Assignment::Virtual) => {
-                format!("Virtual device — “Crossfade: {}”", opts.channel)
+                format!("Virtual device — “{}”", opts.device)
             }
             Some(Assignment::CatchAll) => {
                 "Every app no other channel captures".to_string()

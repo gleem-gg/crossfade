@@ -9,7 +9,7 @@ use std::time::Duration;
 use adw::prelude::*;
 use gtk::{gio, glib};
 
-use crate::audio::PulseManager;
+use crate::audio::AudioManager;
 use crate::config::Config;
 use crate::fx::{VstParamInfo, VstState};
 use crate::lv2;
@@ -18,7 +18,7 @@ use crate::vst;
 /// Everything the dialog needs from the main window.
 pub struct EffectsDeps {
     pub config: Rc<RefCell<Config>>,
-    pub manager: PulseManager,
+    pub manager: AudioManager,
     /// Called after add/remove/reorder/enable/rack changes: persist config,
     /// rebuild the channel routing and refresh the main UI.
     pub on_structure: Rc<dyn Fn(u64)>,

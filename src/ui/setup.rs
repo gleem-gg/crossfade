@@ -11,13 +11,13 @@ use std::time::Duration;
 use adw::prelude::*;
 use gtk::glib;
 
-use crate::audio::{self, PulseManager, STREAM_MIC};
+use crate::audio::AudioManager;
 use crate::config::{Assignment, ChannelConfig, Config};
 
 /// Everything the dialog needs from the main window.
 pub struct SetupDeps {
     pub config: Rc<RefCell<Config>>,
-    pub manager: PulseManager,
+    pub manager: AudioManager,
     /// Called after a fix changed the config: persist it and refresh the
     /// main window (device selectors, sidebar).
     pub on_changed: Rc<dyn Fn()>,
@@ -76,19 +76,20 @@ pub fn mic_channel(config: &Config) -> Option<&ChannelConfig> {
 }
 
 /// Evaluate every setup check against the current server + config state.
-pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
+pub fn evaluate(config: &Config, manager: &AudioManager) -> Vec<SetupItem> {
     let mut items = Vec::new();
 
-    if let Some(sys) = system_channel(config) {
-        let sink = audio::channel_sink_name(sys.id);
+    if let Some(sys) = system_channel(config)
+        && let Some(sink) = manager.channel_sink(sys.id)
+    {
         // Any kind that exposes the channel's own device will do — virtual,
         // app group or catch-all.
         let assigned = sys.assignment.as_ref().is_some_and(Assignment::provides_device);
         items.push(SetupItem {
             title: "Sound Output",
             subtitle: format!(
-                "Use “Crossfade: {}” as the system’s output device",
-                sys.name
+                "Use “{}” as the system’s output device",
+                manager.channel_device_label(sys.id)
             ),
             ok: assigned && manager.default_sink().as_deref() == Some(sink.as_str()),
             fix: SetupFix::DefaultSink {
@@ -99,14 +100,14 @@ pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
         });
     }
 
-    items.push(SetupItem {
-        title: "Sound Input",
-        subtitle: "Use “Crossfade Stream Mix” as the system’s input device".to_string(),
-        ok: manager.default_source().as_deref() == Some(STREAM_MIC),
-        fix: SetupFix::DefaultSource {
-            source: STREAM_MIC.to_string(),
-        },
-    });
+    if let Some(mic) = manager.stream_mic() {
+        items.push(SetupItem {
+            title: "Sound Input",
+            subtitle: "Use “Crossfade Stream Mix” as the system’s input device".to_string(),
+            ok: manager.default_source().as_deref() == Some(mic.as_str()),
+            fix: SetupFix::DefaultSource { source: mic },
+        });
+    }
 
     if let Some(src) = manager.wave_xlr_source()
         && let Some(mic) = mic_channel(config)
@@ -138,7 +139,7 @@ pub fn evaluate(config: &Config, manager: &PulseManager) -> Vec<SetupItem> {
 }
 
 /// True when every check passes (used for the startup notice).
-pub fn all_ok(config: &Config, manager: &PulseManager) -> bool {
+pub fn all_ok(config: &Config, manager: &AudioManager) -> bool {
     evaluate(config, manager).iter().all(|i| i.ok)
 }
 
@@ -154,6 +155,20 @@ fn apply_fix(deps: &SetupDeps, fix: &SetupFix) {
                     ch.assignment = Some(Assignment::Virtual);
                 }
                 deps.manager.rebuild_channel(*channel_id);
+                (deps.on_changed)();
+            }
+            // A monitor left on "System Default" would follow the default
+            // onto our own device and go silent (the monitor never plays
+            // into Crossfade); keep it on the hardware output that was the
+            // default until now.
+            let current = deps.manager.default_sink();
+            let hardware = current
+                .filter(|d| deps.manager.output_sinks().iter().any(|s| &s.name == d));
+            if let Some(hardware) = hardware
+                && deps.config.borrow().master.monitor_device.is_none()
+            {
+                deps.config.borrow_mut().master.monitor_device = Some(hardware);
+                deps.manager.setup_monitor_output();
                 (deps.on_changed)();
             }
             set_default_when_ready(deps.manager.clone(), sink.clone(), true);
@@ -181,7 +196,7 @@ fn apply_fix(deps: &SetupDeps, fix: &SetupFix) {
 /// Make a device the default as soon as it exists on the server. A freshly
 /// (re)created channel sink appears asynchronously, so poll briefly instead
 /// of failing when the fix raced the module load.
-fn set_default_when_ready(manager: PulseManager, name: String, is_sink: bool) {
+fn set_default_when_ready(manager: AudioManager, name: String, is_sink: bool) {
     let mut tries = 0;
     glib::timeout_add_local(Duration::from_millis(250), move || {
         let exists = if is_sink {

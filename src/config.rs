@@ -219,6 +219,12 @@ pub struct ChannelConfig {
     pub next_effect_id: u64,
     /// VST rack processed in front of the LV2 chain.
     pub vst_plugins: Vec<VstPluginConfig>,
+    /// Windows: which of the virtual driver's fixed "Crossfade Channel N"
+    /// output endpoints (0-based) backs this channel's device. Kept stable
+    /// so the system default output survives restarts. Unused on Linux,
+    /// where each channel's sink is created on demand.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub device_slot: Option<u8>,
 }
 
 impl Default for ChannelConfig {
@@ -239,6 +245,7 @@ impl Default for ChannelConfig {
             effects: Vec::new(),
             next_effect_id: 1,
             vst_plugins: Vec::new(),
+            device_slot: None,
         }
     }
 }
@@ -255,11 +262,13 @@ impl ChannelConfig {
     }
 
     /// Effects that should actually be instantiated in the chain.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn enabled_effects(&self) -> Vec<&EffectConfig> {
         self.effects.iter().filter(|e| e.enabled).collect()
     }
 
     /// VST plugins that should actually be loaded into the rack.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn enabled_vsts(&self) -> Vec<&VstPluginConfig> {
         self.vst_plugins.iter().filter(|p| p.enabled).collect()
     }
@@ -271,6 +280,7 @@ impl ChannelConfig {
     }
 
     /// Append an effect and return a reference to it.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn add_effect(&mut self, uri: &str, name: &str) -> &EffectConfig {
         let id = self.next_effect_id;
         self.next_effect_id += 1;
@@ -283,11 +293,13 @@ impl ChannelConfig {
         self.effects.last().unwrap()
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn effect_mut(&mut self, effect_id: u64) -> Option<&mut EffectConfig> {
         self.effects.iter_mut().find(|e| e.id == effect_id)
     }
 
     /// Append a VST plugin from a discovery entry.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn add_vst(&mut self, entry: &crate::vst::VstEntry) -> u64 {
         let id = self.next_effect_id;
         self.next_effect_id += 1;
@@ -303,6 +315,7 @@ impl ChannelConfig {
         id
     }
 
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn vst_mut(&mut self, vst_id: u64) -> Option<&mut VstPluginConfig> {
         self.vst_plugins.iter_mut().find(|p| p.id == vst_id)
     }
