@@ -82,3 +82,22 @@ jobs:
                timestamp: $ts
              }]}' \
           | curl -sf -H "Content-Type: application/json" -d @- "$WEBHOOK"
+
+  aur:
+    name: Publish to AUR
+    if: github.repository == 'gleem-gg/crossfade' && github.event_name == 'release' && secrets.AUR_SSH_PRIVATE_KEY != ''
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050
+        with:
+          pkgname: gleem-crossfade
+          pkgbuild: packaging/aur/PKGBUILD
+          assets: packaging/aur/.SRCINFO
+          commit_username: GitHub Actions
+          commit_email: github-actions@github.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ github.event.release.tag_name }}"
+          updpkgsums: true
