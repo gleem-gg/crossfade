@@ -85,19 +85,48 @@ jobs:
 
   aur:
     name: Publish to AUR
-    if: github.repository == 'gleem-gg/crossfade' && github.event_name == 'release' && secrets.AUR_SSH_PRIVATE_KEY != ''
+    # Only publish what passed `make check` and the release build
+    needs: assets
+    if: github.repository == 'gleem-gg/crossfade' && github.event_name == 'release' && !github.event.release.prerelease
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v5
+      - name: Check for AUR key
+        id: key
+        env:
+          AUR_KEY: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+        run: |
+          if [ -z "$AUR_KEY" ]; then
+            echo "AUR_SSH_PRIVATE_KEY not set, skipping AUR publish"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
 
+      - uses: actions/checkout@v5
+        if: steps.key.outputs.present == 'true'
+
+      # The tagged PKGBUILD can't hold the checksum of its own tag's tarball, so
+      # the version comes from the tag and updpkgsums fills in the checksum.
+      - name: Set PKGBUILD version
+        if: steps.key.outputs.present == 'true'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          sed -i -e "s/^pkgver=.*/pkgver=${TAG#v}/" -e 's/^pkgrel=.*/pkgrel=1/' \
+            packaging/aur/PKGBUILD
+
+      # The action regenerates .SRCINFO itself
       - name: Publish to AUR
-        uses: KSXGitHub/github-actions-deploy-aur@084b0d9b15415bf9cdb65d44dad1efe37a354050
+        if: steps.key.outputs.present == 'true'
+        uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
         with:
           pkgname: gleem-crossfade
           pkgbuild: packaging/aur/PKGBUILD
-          assets: packaging/aur/.SRCINFO
           commit_username: GitHub Actions
           commit_email: github-actions@github.com
           ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
           commit_message: "Update to ${{ github.event.release.tag_name }}"
           updpkgsums: true
+          test: true
+          test_flags: --clean --cleanbuild --syncdeps --noconfirm
