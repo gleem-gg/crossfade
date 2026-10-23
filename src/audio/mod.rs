@@ -106,3 +106,36 @@ pub(crate) fn is_wave_xlr(name: &str, description: &str) -> bool {
     let n = name.to_ascii_lowercase();
     description.contains("Wave XLR") || n.contains("wave_xlr") || n.contains("wave-xlr")
 }
+
+/// Does this device belong to any Elgato Wave USB interface (Wave XLR,
+/// Wave:1, Wave:3, Wave Neo)? Descriptions read "Elgato Wave 3 Mono", names
+/// "alsa_input.usb-Elgato_Systems_Elgato_Wave_3_…".
+pub(crate) fn is_elgato_wave(name: &str, description: &str) -> bool {
+    let n = name.to_ascii_lowercase();
+    description.contains("Elgato Wave") || n.contains("elgato_wave") || n.contains("elgato-wave")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wave_device_matching() {
+        let wave3 = (
+            "alsa_input.usb-Elgato_Systems_Elgato_Wave_3_0000000000-00.mono-fallback",
+            "Elgato Wave 3 Mono",
+        );
+        let xlr = (
+            "alsa_output.usb-Elgato_Systems_Elgato_Wave_XLR_0000000000-00.analog-stereo",
+            "Elgato Wave XLR Analog Stereo",
+        );
+        let other = ("alsa_output.pci-0000_00_1f.3.analog-stereo", "Built-in Audio");
+
+        assert!(is_elgato_wave(wave3.0, wave3.1));
+        assert!(is_elgato_wave(xlr.0, xlr.1));
+        assert!(!is_elgato_wave(other.0, other.1));
+
+        assert!(is_wave_xlr(xlr.0, xlr.1));
+        assert!(!is_wave_xlr(wave3.0, wave3.1));
+    }
+}

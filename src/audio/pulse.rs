@@ -31,7 +31,7 @@ use pulse::sample::{Format, Spec};
 use pulse::stream::{FlagSet as StreamFlagSet, PeekResult, Stream};
 use pulse::volume::{ChannelVolumes, Volume};
 
-use super::{is_wave_xlr, AudioEvent, LevelTarget, Mix, SinkEntry, SourceEntry};
+use super::{is_elgato_wave, is_wave_xlr, AudioEvent, LevelTarget, Mix, SinkEntry, SourceEntry};
 use crate::config::{self, Assignment, ChannelConfig, Config, MasterConfig};
 use crate::fx::{self, FxEvent, FxManager};
 use crate::lv2;
@@ -61,14 +61,6 @@ fn channel_sink_description(id: u64, channel_name: &str) -> String {
     } else {
         format!("Crossfade: {clean}")
     }
-}
-
-/// Does this device belong to any Elgato Wave USB interface (Wave XLR,
-/// Wave:1, Wave:3, Wave Neo)? Descriptions read "Elgato Wave 3 Mono", names
-/// "alsa_input.usb-Elgato_Systems_Elgato_Wave_3_…".
-fn is_elgato_wave(name: &str, description: &str) -> bool {
-    let n = name.to_ascii_lowercase();
-    description.contains("Elgato Wave") || n.contains("elgato_wave") || n.contains("elgato-wave")
 }
 
 /// Strip characters that would break PulseAudio module argument quoting.
@@ -2344,30 +2336,5 @@ impl PulseManager {
         if ok {
             rc.borrow_mut().peaks.insert(target, stream);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn wave_device_matching() {
-        let wave3 = (
-            "alsa_input.usb-Elgato_Systems_Elgato_Wave_3_0000000000-00.mono-fallback",
-            "Elgato Wave 3 Mono",
-        );
-        let xlr = (
-            "alsa_output.usb-Elgato_Systems_Elgato_Wave_XLR_0000000000-00.analog-stereo",
-            "Elgato Wave XLR Analog Stereo",
-        );
-        let other = ("alsa_output.pci-0000_00_1f.3.analog-stereo", "Built-in Audio");
-
-        assert!(is_elgato_wave(wave3.0, wave3.1));
-        assert!(is_elgato_wave(xlr.0, xlr.1));
-        assert!(!is_elgato_wave(other.0, other.1));
-
-        assert!(is_wave_xlr(xlr.0, xlr.1));
-        assert!(!is_wave_xlr(wave3.0, wave3.1));
     }
 }

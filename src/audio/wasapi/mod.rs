@@ -38,7 +38,7 @@ use self::driver::{DriverRole, MAX_SLOTS};
 use self::engine::{Command, Engine, EngineEvent, InputSpec};
 use self::policy::AppRouting;
 use self::sessions::Sessions;
-use super::{AudioEvent, Mix, SinkEntry, SourceEntry, is_wave_xlr};
+use super::{AudioEvent, Mix, SinkEntry, SourceEntry, is_elgato_wave, is_wave_xlr};
 use crate::config::{self, Assignment, ChannelConfig, Config, MasterConfig};
 
 /// Sources that record a render endpoint ("monitors") are named with this
@@ -802,6 +802,20 @@ impl WasapiManager {
         self.output_sinks()
             .into_iter()
             .find(|s| is_wave_xlr(&s.name, &s.description))
+    }
+
+    /// The capture endpoint of any connected Elgato Wave interface.
+    pub fn wave_source(&self) -> Option<SourceEntry> {
+        self.sources()
+            .into_iter()
+            .find(|s| !s.is_monitor && is_elgato_wave(&s.name, &s.description))
+    }
+
+    /// The output endpoint of any connected Elgato Wave interface.
+    pub fn wave_sink(&self) -> Option<SinkEntry> {
+        self.output_sinks()
+            .into_iter()
+            .find(|s| is_elgato_wave(&s.name, &s.description))
     }
 }
 
