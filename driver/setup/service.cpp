@@ -120,47 +120,72 @@ static void ServeClients()
     HANDLE ioEvent = CreateEventW(nullptr, TRUE, FALSE, nullptr);
     char buffer[CF_NAMER_MAX_MESSAGE];
 
+    // One pipe instance, created once and reused for every client: closing
+    // and recreating it would leave moments in which the name is free, and
+    // any local process could claim it and pose as this service.
+    HANDLE pipe = INVALID_HANDLE_VALUE;
     while (WaitForSingleObject(g_StopEvent, 0) != WAIT_OBJECT_0) {
-        HANDLE pipe = CreateNamedPipeW(
-            CF_NAMER_PIPE, PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED,
-            PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS, 1,
-            64, CF_NAMER_MAX_MESSAGE, 0, &sa);
         if (pipe == INVALID_HANDLE_VALUE) {
-            // Another instance owns the name, or resources ran out: back off.
-            WaitForSingleObject(g_StopEvent, 5000);
-            continue;
+            pipe = CreateNamedPipeW(
+                CF_NAMER_PIPE,
+                PIPE_ACCESS_DUPLEX | FILE_FLAG_OVERLAPPED | FILE_FLAG_FIRST_PIPE_INSTANCE,
+                PIPE_TYPE_MESSAGE | PIPE_READMODE_MESSAGE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS,
+                1, 64, CF_NAMER_MAX_MESSAGE, 0, &sa);
+            if (pipe == INVALID_HANDLE_VALUE) {
+                // Another process owns the name, or resources ran out: back off.
+                WaitForSingleObject(g_StopEvent, 5000);
+                continue;
+            }
         }
         OVERLAPPED ov = {};
         ov.hEvent = ioEvent;
         ResetEvent(ioEvent);
         DWORD n = 0;
         bool connected = ConnectNamedPipe(pipe, &ov) != FALSE;
+        DWORD err = connected ? ERROR_SUCCESS : GetLastError();
         if (!connected) {
-            DWORD err = GetLastError();
             connected = err == ERROR_PIPE_CONNECTED ||
                         (err == ERROR_IO_PENDING && WaitIo(pipe, &ov, INFINITE, &n));
         }
-        if (connected) {
-            ResetEvent(ioEvent);
-            DWORD size = 0;
-            bool read = ReadFile(pipe, buffer, sizeof(buffer), &size, &ov) != FALSE;
-            if (!read && GetLastError() == ERROR_IO_PENDING) {
-                read = WaitIo(pipe, &ov, CLIENT_TIMEOUT_MS, &size);
-            }
-            std::wstring names[CF_RENDER_SLOTS];
-            bool ok = read && ParseRequest(buffer, size, names);
-            if (ok) {
-                NameEndpoints(names, 0, false);
-            }
-            const char* reply = ok ? "ok\n" : "error\n";
-            ResetEvent(ioEvent);
-            if (!WriteFile(pipe, reply, DWORD(strlen(reply)), &n, &ov) &&
-                GetLastError() == ERROR_IO_PENDING) {
-                WaitIo(pipe, &ov, CLIENT_TIMEOUT_MS, &n);
-            }
-            FlushFileBuffers(pipe);
+        if (!connected) {
+            // ERROR_NO_DATA: the client already left; anything else is
+            // unexpected, so pause instead of spinning on it.
             DisconnectNamedPipe(pipe);
+            if (err != ERROR_NO_DATA) {
+                WaitForSingleObject(g_StopEvent, 1000);
+            }
+            continue;
         }
+        ResetEvent(ioEvent);
+        DWORD size = 0;
+        bool read = ReadFile(pipe, buffer, sizeof(buffer), &size, &ov) != FALSE;
+        if (!read && GetLastError() == ERROR_IO_PENDING) {
+            read = WaitIo(pipe, &ov, CLIENT_TIMEOUT_MS, &size);
+        }
+        std::wstring names[CF_RENDER_SLOTS];
+        bool ok = read && ParseRequest(buffer, size, names);
+        if (ok) {
+            NameEndpoints(names, 0, false);
+        }
+        const char* reply = ok ? "ok\n" : "error\n";
+        ResetEvent(ioEvent);
+        if (!WriteFile(pipe, reply, DWORD(strlen(reply)), &n, &ov) &&
+            GetLastError() == ERROR_IO_PENDING) {
+            WaitIo(pipe, &ov, CLIENT_TIMEOUT_MS, &n);
+        }
+        // Give the client a moment to read the reply before disconnecting
+        // discards it: wait for it to close its end (the read then fails
+        // with ERROR_BROKEN_PIPE). Unlike FlushFileBuffers this has a
+        // timeout, so a client that never reads cannot hang the service.
+        ResetEvent(ioEvent);
+        char drain[16];
+        if (!ReadFile(pipe, drain, sizeof(drain), &n, &ov) &&
+            GetLastError() == ERROR_IO_PENDING) {
+            WaitIo(pipe, &ov, CLIENT_TIMEOUT_MS, &n);
+        }
+        DisconnectNamedPipe(pipe);
+    }
+    if (pipe != INVALID_HANDLE_VALUE) {
         CloseHandle(pipe);
     }
     CloseHandle(ioEvent);

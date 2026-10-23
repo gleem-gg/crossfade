@@ -7,6 +7,9 @@
 //! the outputs keep their numbered names.
 
 use std::io::{Read, Write};
+use std::os::windows::fs::OpenOptionsExt;
+
+use windows::Win32::Storage::FileSystem::SECURITY_IDENTIFICATION;
 
 /// Keep in sync with `CF_NAMER_PIPE` / `CF_NAMER_MAX_NAME` in
 /// `driver/inc/crossfade.h`.
@@ -31,7 +34,14 @@ pub fn channel_endpoint_name(channel_name: &str) -> String {
 /// busy or missing service never stalls the UI.
 pub fn request(names: Vec<(u8, String)>) {
     std::thread::spawn(move || {
-        let Ok(mut pipe) = std::fs::OpenOptions::new().read(true).write(true).open(PIPE) else {
+        // Identification only: whoever serves the pipe may learn who we
+        // are but cannot act as us, should something else own the name.
+        let Ok(mut pipe) = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .security_qos_flags(SECURITY_IDENTIFICATION.0)
+            .open(PIPE)
+        else {
             return;
         };
         let message: String = names

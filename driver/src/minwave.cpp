@@ -499,6 +499,12 @@ public:
         if (!mdl) {
             return STATUS_INSUFFICIENT_RESOURCES;
         }
+        // The allocation may come back short; the buffer must cover all of
+        // `size`, which Advance() writes up to.
+        if (MmGetMdlByteCount(mdl) < size) {
+            m_PortStream->FreePagesFromMdl(mdl);
+            return STATUS_INSUFFICIENT_RESOURCES;
+        }
         PBYTE buffer = static_cast<PBYTE>(m_PortStream->MapAllocatedPages(mdl, MmCached));
         if (!buffer) {
             m_PortStream->FreePagesFromMdl(mdl);

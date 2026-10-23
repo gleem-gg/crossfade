@@ -157,20 +157,11 @@ static NTSTATUS AddDevice(_In_ PDRIVER_OBJECT DriverObject, _In_ PDEVICE_OBJECT 
                               g_EndpointCount * 2, 0);
 }
 
-_Function_class_(DRIVER_UNLOAD)
-static void DriverUnload(_In_ PDRIVER_OBJECT DriverObject)
-{
-    UNREFERENCED_PARAMETER(DriverObject);
-}
-
 extern "C" DRIVER_INITIALIZE DriverEntry;
 
+// PcInitializeAdapterDriver installs PortCls' own DriverUnload, which has to
+// run on unload; there is nothing of ours to clean up, so it stays in place.
 extern "C" NTSTATUS DriverEntry(_In_ PDRIVER_OBJECT DriverObject, _In_ PUNICODE_STRING RegistryPath)
 {
-    NTSTATUS status = PcInitializeAdapterDriver(DriverObject, RegistryPath,
-                                                (PDRIVER_ADD_DEVICE)AddDevice);
-    if (NT_SUCCESS(status)) {
-        DriverObject->DriverUnload = DriverUnload;
-    }
-    return status;
+    return PcInitializeAdapterDriver(DriverObject, RegistryPath, (PDRIVER_ADD_DEVICE)AddDevice);
 }
