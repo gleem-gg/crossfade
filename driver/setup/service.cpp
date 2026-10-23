@@ -45,6 +45,27 @@ static DWORD WINAPI ControlHandler(DWORD control, DWORD, LPVOID, LPVOID)
 
 // Turn a client-supplied name into a safe endpoint description: valid UTF-8,
 // no control characters, trimmed, at most CF_NAMER_MAX_NAME characters.
+// Characters names must not contain: controls (C0, DEL, C1) and bidi
+// formatting characters, which could make a device name display as
+// something else (e.g. U+202E reverses the text after it). Keep in sync
+// with `clean_name` in src/audio/wasapi/namer.rs: the app compares Windows'
+// names with its own cleaned ones, so both sides must agree exactly.
+static bool IsUnsafeChar(wchar_t c)
+{
+    return c < 0x20 || (c >= 0x7F && c <= 0x9F) || c == 0x061C || c == 0x200E || c == 0x200F ||
+           (c >= 0x202A && c <= 0x202E) || (c >= 0x2066 && c <= 0x2069);
+}
+
+static void TrimSpaces(std::wstring& s)
+{
+    size_t first = s.find_first_not_of(L' ');
+    if (first == std::wstring::npos) {
+        s.clear();
+        return;
+    }
+    s = s.substr(first, s.find_last_not_of(L' ') - first + 1);
+}
+
 static std::wstring CleanName(const char* utf8, int len)
 {
     if (len <= 0) {
@@ -58,17 +79,18 @@ static std::wstring CleanName(const char* utf8, int len)
     MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, utf8, len, raw.data(), wlen);
     std::wstring out;
     for (wchar_t c : raw) {
-        if (c >= 0x20 && c != 0x7F) {
+        if (!IsUnsafeChar(c)) {
             out.push_back(c);
         }
     }
-    size_t first = out.find_first_not_of(L' ');
-    if (first == std::wstring::npos) {
-        return {};
-    }
-    out = out.substr(first, out.find_last_not_of(L' ') - first + 1);
+    TrimSpaces(out);
     if (out.size() > CF_NAMER_MAX_NAME) {
         out.resize(CF_NAMER_MAX_NAME);
+        // Never leave half of a surrogate pair behind.
+        if (out.back() >= 0xD800 && out.back() <= 0xDBFF) {
+            out.pop_back();
+        }
+        TrimSpaces(out);
     }
     return out;
 }

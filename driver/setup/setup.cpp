@@ -166,6 +166,43 @@ static int Install(const wchar_t* infArg)
     return InstallService() ? 0 : 1;
 }
 
+// Is this published oem*.inf our driver package? Both the service it
+// installs must be exactly CrossfadeAudio and the driver store must record
+// CrossfadeAudio.inf as its original name, so an unrelated INF that merely
+// shares a prefix is never removed.
+static bool IsOurInf(const wchar_t* path)
+{
+    wchar_t service[128] = {};
+    if (!GetPrivateProfileStringW(L"Crossfade_Device.NT.Services", L"AddService", L"", service,
+                                  ARRAYSIZE(service), path)) {
+        return false;
+    }
+    std::wstring name(service);
+    name = name.substr(0, name.find(L','));
+    size_t first = name.find_first_not_of(L" \t");
+    size_t last = name.find_last_not_of(L" \t");
+    if (first == std::wstring::npos ||
+        _wcsicmp(name.substr(first, last - first + 1).c_str(), L"CrossfadeAudio") != 0) {
+        return false;
+    }
+
+    DWORD size = 0;
+    if (!SetupGetInfInformationW(path, INFINFO_INF_NAME_IS_ABSOLUTE, nullptr, 0, &size)) {
+        return false;
+    }
+    std::vector<BYTE> buffer(size);
+    auto* info = reinterpret_cast<PSP_INF_INFORMATION>(buffer.data());
+    if (!SetupGetInfInformationW(path, INFINFO_INF_NAME_IS_ABSOLUTE, info, size, nullptr)) {
+        return false;
+    }
+    SP_ORIGINAL_FILE_INFO_W original = {sizeof(original)};
+    if (!SetupQueryInfOriginalFileInformationW(info, 0, nullptr, &original)) {
+        return false;
+    }
+    const wchar_t* base = wcsrchr(original.OriginalInfName, L'\\');
+    return _wcsicmp(base ? base + 1 : original.OriginalInfName, L"CrossfadeAudio.inf") == 0;
+}
+
 static int Uninstall()
 {
     bool failed = !UninstallService();
@@ -195,11 +232,7 @@ static int Uninstall()
             GetWindowsDirectoryW(path, MAX_PATH);
             wcscat_s(path, L"\\INF\\");
             wcscat_s(path, fd.cFileName);
-            wchar_t service[64] = {};
-            // Our INF is the one whose service is CrossfadeAudio.
-            if (GetPrivateProfileStringW(L"Crossfade_Device.NT.Services", L"AddService", L"",
-                                         service, ARRAYSIZE(service), path) &&
-                _wcsnicmp(service, L"CrossfadeAudio", 14) == 0) {
+            if (IsOurInf(path)) {
                 oems.push_back(fd.cFileName);
             }
         } while (FindNextFileW(h, &fd));

@@ -664,11 +664,16 @@ static NTSTATUS PropertyHandlerPush(_In_ PPCPROPERTY_REQUEST Request)
         return STATUS_INVALID_DEVICE_REQUEST;
     }
     const ULONG frameBytes = CF_PUSH_CHANNELS * sizeof(LONG);
-    if (!Request->Value || Request->ValueSize == 0 || Request->ValueSize % frameBytes) {
+    if (!Request->Value || Request->ValueSize == 0 || Request->ValueSize % frameBytes ||
+        Request->ValueSize / frameBytes > CF_MAX_PUSH_FRAMES) {
         return STATUS_INVALID_BUFFER_SIZE;
     }
-    // MajorTarget is the miniport's IMiniportWaveRT, its first base.
-    auto* miniport = reinterpret_cast<CMiniportWaveRT*>(Request->MajorTarget);
+    // MajorTarget points at the miniport's IMiniportWaveRT subobject (also
+    // its IUnknown, which our QueryInterface hands out through that base).
+    // Casting down from that interface lets the compiler apply the base
+    // offset, so this does not depend on base-class order.
+    auto* miniport =
+        static_cast<CMiniportWaveRT*>(reinterpret_cast<PMINIPORTWAVERT>(Request->MajorTarget));
     miniport->Push(static_cast<const LONG*>(Request->Value), Request->ValueSize / frameBytes);
     return STATUS_SUCCESS;
 }

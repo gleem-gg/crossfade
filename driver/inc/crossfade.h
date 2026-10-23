@@ -16,8 +16,11 @@
     0x9c877548L, 0x3cf8, 0x4138, 0x88, 0xe2, 0xc2, 0xd6, 0xdf, 0xb6, 0xb2, 0x6b
 
 // SET on a capture wave filter: append frames to its ring buffer. The
-// property value is the PCM data (a whole number of frames).
+// property value is the PCM data (a whole number of frames, at most
+// CF_MAX_PUSH_FRAMES; larger pushes are rejected, which bounds the work done
+// under the ring's spinlock).
 #define KSPROPERTY_CROSSFADE_PUSH 1
+#define CF_MAX_PUSH_FRAMES (CF_RATE / 10)
 
 // Number of "Crossfade Channel N" render endpoints.
 #define CF_RENDER_SLOTS 8

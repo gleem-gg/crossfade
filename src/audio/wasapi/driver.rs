@@ -33,6 +33,8 @@ const PROPSET: GUID = GUID::from_u128(0x9c877548_3cf8_4138_88e2_c2d6dfb6b26b);
 /// SET: interleaved stereo s32 frames at 48 kHz, appended to the ring.
 /// Integer PCM so the kernel side never needs floating point.
 const PROP_PUSH: u32 = 1;
+/// Largest push the driver accepts, in frames (`CF_MAX_PUSH_FRAMES`, 100 ms).
+const MAX_PUSH_FRAMES: usize = 4800;
 
 const KSCATEGORY_AUDIO: GUID = GUID::from_u128(0x6994ad04_93ef_11d0_a3cc_00a0c9223196);
 /// CTL_CODE(FILE_DEVICE_KS, 0x000, METHOD_NEITHER, FILE_ANY_ACCESS)
@@ -227,13 +229,17 @@ impl MicFeed {
         })
     }
 
-    /// Append interleaved stereo frames to the microphone's ring buffer.
-    /// Returns false when the driver rejected the call (e.g. it was
-    /// unloaded), so the caller can reopen.
+    /// Append interleaved stereo frames to the microphone's ring buffer, in
+    /// pieces no larger than the driver accepts. Returns false when the
+    /// driver rejected a call (e.g. it was unloaded), so the caller can
+    /// reopen.
     pub fn push(&mut self, frames: &[f32]) -> bool {
-        if frames.is_empty() {
-            return true;
-        }
+        frames
+            .chunks(MAX_PUSH_FRAMES * 2)
+            .all(|chunk| self.push_chunk(chunk))
+    }
+
+    fn push_chunk(&mut self, frames: &[f32]) -> bool {
         self.pcm.clear();
         self.pcm
             .extend(frames.iter().map(|s| (s.clamp(-1.0, 1.0) * i32::MAX as f32) as i32));
@@ -269,6 +275,7 @@ impl Drop for MicFeed {
         }
     }
 }
+
 
 
 

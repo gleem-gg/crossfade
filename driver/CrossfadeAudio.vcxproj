@@ -48,6 +48,12 @@
     <!-- The WDK's in-build InfVerif task fails to load its DLL with Build
          Tools only; run infverif.exe directly instead (see README). -->
     <SkipPackageVerification>true</SkipPackageVerification>
+    <!-- A distinct DriverVer per build (0.9.<yyMM>.<minute of the month>,
+         UTC). The driver store identifies a package by its INF, so a rebuild
+         with an identical INF would "install" fine but keep running the old
+         binary. -->
+    <CfMinuteOfMonth>$([MSBuild]::Add($([MSBuild]::Multiply($([System.DateTime]::UtcNow.Day), 1440)), $([MSBuild]::Add($([MSBuild]::Multiply($([System.DateTime]::UtcNow.Hour), 60)), $([System.DateTime]::UtcNow.Minute)))))</CfMinuteOfMonth>
+    <CfDriverVersion>0.9.$([System.DateTime]::UtcNow.ToString("yyMM")).$(CfMinuteOfMonth)</CfDriverVersion>
   </PropertyGroup>
   <ItemDefinitionGroup>
     <ClCompile>
@@ -62,7 +68,7 @@
       <FileDigestAlgorithm>sha256</FileDigestAlgorithm>
     </DriverSign>
     <Inf>
-      <TimeStamp>0.9.0.0</TimeStamp>
+      <TimeStamp>$(CfDriverVersion)</TimeStamp>
     </Inf>
   </ItemDefinitionGroup>
   <ItemGroup>
