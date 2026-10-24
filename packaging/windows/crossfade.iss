@@ -55,6 +55,12 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 [Run]
 Filename: "{app}\bin\gleem-crossfade.exe"; Description: "Launch Gleem Crossfade"; Flags: nowait postinstall skipifsilent runasoriginaluser
 
+[UninstallDelete]
+; Inno Setup only removes folders it created; also remove the install
+; folder when it predates the installation (e.g. the naming service was set
+; up by hand) but is empty once everything else is gone.
+Type: dirifempty; Name: "{app}"
+
 [UninstallRun]
 ; Runs before the files are removed: driver device, driver packages and the
 ; endpoint naming service (with its copy in Program Files).
