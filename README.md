@@ -1,7 +1,7 @@
 # Gleem Crossfade
 
 A dual-mix virtual audio mixer for Linux, built with GTK4/libadwaita on top of
-PipeWire. Crossfade routes your microphone, applications, and virtual devices
+PipeWire, with a Windows preview (see [Windows](#windows-preview)). Crossfade routes your microphone, applications, and virtual devices
 into two independent mixes — no special hardware required. Part of the
 [Gleem](https://gleem.gg/crossfade?mtm_campaign=github-readme&mtm_source=github&mtm_medium=repo&mtm_content=crossfade-intro&mtm_kwd=crossfade)
 streaming tools.
@@ -147,6 +147,46 @@ install. Make sure `~/.local/bin` is on your `PATH`, then launch **Gleem
 Crossfade** from your app grid, or run `gleem-crossfade` directly.
 `make uninstall` removes everything again.
 
+### Windows (preview)
+
+Crossfade also runs on Windows 10 (2004 or later) and Windows 11. The
+virtual devices come from Crossfade's own audio driver, which provides
+**“Crossfade Stream Mix”** and **“Crossfade VOD Mix”** microphones plus eight
+outputs, one per mixer channel, named after their channels
+(**“Crossfade: Game”**) by a small helper service installed with the driver.
+Application channels move apps onto their channel's output automatically,
+the same way Windows' *App volume and device preferences* does.
+
+The driver is not Microsoft-signed yet. Until it is, it only installs on
+machines in test-signing mode; see [driver/README.md](driver/README.md) for
+build and install steps. Effects (VST/LV2) are not available on Windows
+yet. The D-Bus API works on GLib's own session bus, which it starts
+automatically.
+
+Building the app needs Rust and the [gvsbuild](https://github.com/wingtk/gvsbuild)
+GTK4 bundle unpacked to `C:\gtk`:
+
+```powershell
+$env:PKG_CONFIG_PATH = 'C:\gtk\lib\pkgconfig'
+$env:Path = "C:\gtk\bin;$env:Path"
+$env:LIB = "C:\gtk\lib;$env:LIB"
+cargo build --release
+```
+
+To build the installer (`GleemCrossfade-<version>-setup.exe`), which bundles
+the GTK runtime, the driver and the naming service, install
+[Inno Setup 6](https://jrsoftware.org/isinfo.php) and run:
+
+```powershell
+.\packaging\windows\build-installer.ps1
+```
+
+The installer puts Crossfade in `C:\Program Files\Gleem Crossfade`, sets up
+the driver, and adds a Start menu entry and an uninstaller under
+*Settings → Apps*. Uninstalling quits a running Crossfade and removes the
+driver, the naming service and the Start-at-login entry; your settings in
+`%LOCALAPPDATA%\gleem-crossfade` are kept.
+
 ### Upgrading from OpenWave
 
 Crossfade was previously published as **OpenWave**. Your configuration
@@ -250,4 +290,7 @@ Crossfade down — the channel falls back to its direct wiring.
 
 ## License
 
-MIT
+Copyright 2026 Anikeen UG (haftungsbeschränkt) & Co. KG
+<support@anikeen.com>
+
+Licensed under the [Apache License, Version 2.0](LICENSE).

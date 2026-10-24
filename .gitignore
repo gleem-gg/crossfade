@@ -1,2 +1,4 @@
 /target
 /.idea
+/driver/build
+/packaging/windows/build

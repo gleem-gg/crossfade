@@ -12,12 +12,12 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 
-use crate::audio::PulseManager;
+use crate::audio::AudioManager;
 use crate::config::Config;
 
 pub struct XlrDeps {
     pub config: Rc<RefCell<Config>>,
-    pub manager: PulseManager,
+    pub manager: AudioManager,
     /// Called after a volume change was written into the config.
     pub on_changed: Rc<dyn Fn()>,
 }

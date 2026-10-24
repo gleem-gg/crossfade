@@ -8,6 +8,10 @@
 //! in `~/.cache/gleem-crossfade/vst-scan-v2.json` keyed by path + mtime, so only
 //! new or changed binaries are probed on later scans.
 
+// The plugin types are part of the (shared) config format; discovery and
+// hosting are only wired up on Linux.
+#![cfg_attr(not(target_os = "linux"), allow(dead_code))]
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};

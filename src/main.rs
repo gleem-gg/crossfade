@@ -1,8 +1,14 @@
+// No console window behind the GUI on Windows release builds.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod audio;
 mod config;
+#[cfg(target_os = "linux")]
 mod fx;
+#[cfg(target_os = "linux")]
 mod lv2;
 mod midi;
+mod platform;
 mod ui;
 mod vst;
 
@@ -25,7 +31,7 @@ fn main() -> glib::ExitCode {
     // One-time migration of config/state from the pre-rename OpenWave identity.
     if config::migrate_from_openwave() {
         // A legacy autostart entry existed; recreate it under the new app id.
-        if let Err(e) = ui::window::set_autostart(true) {
+        if let Err(e) = platform::set_autostart(true) {
             eprintln!("gleem-crossfade: could not migrate the autostart entry: {e}");
         }
     }
@@ -40,62 +46,25 @@ fn main() -> glib::ExitCode {
         None,
     );
     app.add_main_option(
-        "list-lv2",
+        "quit",
         glib::Char::from(0u8),
         glib::OptionFlags::NONE,
         glib::OptionArg::None,
-        "List usable LV2 plugins and exit (diagnostic)",
+        "Quit the running instance, as its Quit menu item does (used by the installer)",
         None,
     );
-    app.add_main_option(
-        "list-vst",
-        glib::Char::from(0u8),
-        glib::OptionFlags::NONE,
-        glib::OptionArg::None,
-        "List usable VST plugins and exit (diagnostic)",
-        None,
-    );
+    #[cfg(target_os = "linux")]
+    add_effect_options(&app);
     let start_hidden = Rc::new(Cell::new(false));
     {
         let start_hidden = start_hidden.clone();
-        app.connect_handle_local_options(move |_, options| {
-            if options.contains("list-lv2") {
-                match lv2::catalog() {
-                    Some(cat) => {
-                        for p in &cat.plugins {
-                            let ch = if p.is_mono() { "mono" } else { "stereo" };
-                            println!("{} [{ch}, {} controls]\n    {}", p.name, p.controls.len(), p.uri);
-                        }
-                        eprintln!("{} usable plugins", cat.plugins.len());
-                        return std::ops::ControlFlow::Break(glib::ExitCode::SUCCESS);
-                    }
-                    None => {
-                        eprintln!("liblilv could not be loaded");
-                        return std::ops::ControlFlow::Break(glib::ExitCode::FAILURE);
-                    }
-                }
+        app.connect_handle_local_options(move |app, options| {
+            #[cfg(target_os = "linux")]
+            if let Some(code) = handle_effect_options(options) {
+                return std::ops::ControlFlow::Break(code);
             }
-            if options.contains("list-vst") {
-                if !vst::available() {
-                    eprintln!("VST hosting unavailable (Carla and/or python3 missing)");
-                    return std::ops::ControlFlow::Break(glib::ExitCode::FAILURE);
-                }
-                let entries = vst::scan();
-                for e in &entries {
-                    println!(
-                        "{} [{}] {}{}",
-                        e.name,
-                        e.format.as_str(),
-                        e.path,
-                        if e.label.is_empty() {
-                            String::new()
-                        } else {
-                            format!(" ({})", e.label)
-                        }
-                    );
-                }
-                eprintln!("{} usable plugins", entries.len());
-                return std::ops::ControlFlow::Break(glib::ExitCode::SUCCESS);
+            if options.contains("quit") {
+                return std::ops::ControlFlow::Break(quit_running_instance(app));
             }
             if options.contains("hidden") {
                 start_hidden.set(true);
@@ -107,8 +76,10 @@ fn main() -> glib::ExitCode {
         ui::load_css();
         // Scan the LV2 world in the background so channel wiring and the
         // effects dialog don't freeze the UI on first use.
+        #[cfg(target_os = "linux")]
         lv2::warm();
         // Warm the VST discovery cache so the plugin picker opens fast.
+        #[cfg(target_os = "linux")]
         if vst::available() {
             std::thread::spawn(|| {
                 let _ = vst::scan();
@@ -134,4 +105,86 @@ fn main() -> glib::ExitCode {
     });
     app.set_accels_for_action("app.quit", &["<primary>q"]);
     app.run()
+}
+
+/// `--quit`: ask the primary instance to run `app.quit` (save, unload the
+/// virtual devices, release per-app routes, exit). Without a running
+/// instance there is nothing to do.
+fn quit_running_instance(app: &adw::Application) -> glib::ExitCode {
+    if let Err(e) = app.register(None::<&gtk::gio::Cancellable>) {
+        eprintln!("gleem-crossfade: could not reach the running instance: {e}");
+        return glib::ExitCode::FAILURE;
+    }
+    if app.is_remote() {
+        app.activate_action("quit", None);
+        // The activation is sent asynchronously; deliver it before exiting.
+        if let Some(connection) = app.dbus_connection() {
+            let _ = connection.flush_sync(None::<&gtk::gio::Cancellable>);
+        }
+    }
+    glib::ExitCode::SUCCESS
+}
+
+#[cfg(target_os = "linux")]
+fn add_effect_options(app: &adw::Application) {
+    app.add_main_option(
+        "list-lv2",
+        glib::Char::from(0u8),
+        glib::OptionFlags::NONE,
+        glib::OptionArg::None,
+        "List usable LV2 plugins and exit (diagnostic)",
+        None,
+    );
+    app.add_main_option(
+        "list-vst",
+        glib::Char::from(0u8),
+        glib::OptionFlags::NONE,
+        glib::OptionArg::None,
+        "List usable VST plugins and exit (diagnostic)",
+        None,
+    );
+}
+
+/// `--list-lv2` / `--list-vst`: print the plugin catalog and exit.
+#[cfg(target_os = "linux")]
+fn handle_effect_options(options: &glib::VariantDict) -> Option<glib::ExitCode> {
+    if options.contains("list-lv2") {
+        match lv2::catalog() {
+            Some(cat) => {
+                for p in &cat.plugins {
+                    let ch = if p.is_mono() { "mono" } else { "stereo" };
+                    println!("{} [{ch}, {} controls]\n    {}", p.name, p.controls.len(), p.uri);
+                }
+                eprintln!("{} usable plugins", cat.plugins.len());
+                return Some(glib::ExitCode::SUCCESS);
+            }
+            None => {
+                eprintln!("liblilv could not be loaded");
+                return Some(glib::ExitCode::FAILURE);
+            }
+        }
+    }
+    if options.contains("list-vst") {
+        if !vst::available() {
+            eprintln!("VST hosting unavailable (Carla and/or python3 missing)");
+            return Some(glib::ExitCode::FAILURE);
+        }
+        let entries = vst::scan();
+        for e in &entries {
+            println!(
+                "{} [{}] {}{}",
+                e.name,
+                e.format.as_str(),
+                e.path,
+                if e.label.is_empty() {
+                    String::new()
+                } else {
+                    format!(" ({})", e.label)
+                }
+            );
+        }
+        eprintln!("{} usable plugins", entries.len());
+        return Some(glib::ExitCode::SUCCESS);
+    }
+    None
 }
