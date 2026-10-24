@@ -138,6 +138,8 @@ AddReg = Crossfade.I.TopoStream.AddReg
 [Crossfade.I.TopoStream.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.StreamMix%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveVod]
 AddReg = Crossfade.I.WaveVod.AddReg
@@ -152,6 +154,8 @@ AddReg = Crossfade.I.TopoVod.AddReg
 [Crossfade.I.TopoVod.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.VodMix%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh1]
 AddReg = Crossfade.I.WaveCh1.AddReg
@@ -166,6 +170,8 @@ AddReg = Crossfade.I.TopoCh1.AddReg
 [Crossfade.I.TopoCh1.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch1%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh2]
 AddReg = Crossfade.I.WaveCh2.AddReg
@@ -180,6 +186,8 @@ AddReg = Crossfade.I.TopoCh2.AddReg
 [Crossfade.I.TopoCh2.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch2%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh3]
 AddReg = Crossfade.I.WaveCh3.AddReg
@@ -194,6 +202,8 @@ AddReg = Crossfade.I.TopoCh3.AddReg
 [Crossfade.I.TopoCh3.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch3%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh4]
 AddReg = Crossfade.I.WaveCh4.AddReg
@@ -208,6 +218,8 @@ AddReg = Crossfade.I.TopoCh4.AddReg
 [Crossfade.I.TopoCh4.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch4%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh5]
 AddReg = Crossfade.I.WaveCh5.AddReg
@@ -222,6 +234,8 @@ AddReg = Crossfade.I.TopoCh5.AddReg
 [Crossfade.I.TopoCh5.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch5%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh6]
 AddReg = Crossfade.I.WaveCh6.AddReg
@@ -236,6 +250,8 @@ AddReg = Crossfade.I.TopoCh6.AddReg
 [Crossfade.I.TopoCh6.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch6%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh7]
 AddReg = Crossfade.I.WaveCh7.AddReg
@@ -250,6 +266,8 @@ AddReg = Crossfade.I.TopoCh7.AddReg
 [Crossfade.I.TopoCh7.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch7%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade.I.WaveCh8]
 AddReg = Crossfade.I.WaveCh8.AddReg
@@ -264,6 +282,8 @@ AddReg = Crossfade.I.TopoCh8.AddReg
 [Crossfade.I.TopoCh8.AddReg]
 HKR,,CLSID,,%Proxy.CLSID%
 HKR,,FriendlyName,,%Desc.Ch8%
+HKR,EP\0,%PKEY_AudioEndpoint_Association%,,%KSNODETYPE_ANY%
+HKR,EP\0,%PKEY_AudioEngine_OEMFormat%,%REG_BINARY%,41,00,00,00,28,00,00,00,FE,FF,02,00,80,BB,00,00,00,EE,02,00,04,00,10,00,16,00,10,00,03,00,00,00,01,00,00,00,00,00,10,00,80,00,00,AA,00,38,9B,71
 
 [Crossfade_Device.NT.Services]
 AddService = CrossfadeAudio, 0x00000002, Crossfade_Service
@@ -289,6 +309,16 @@ KSCATEGORY_CAPTURE  = "{65E8773D-8F56-11D0-A3B9-00A0C9223196}"
 KSCATEGORY_REALTIME = "{EB115FFC-10C8-4964-831D-6DCB02E6F23F}"
 KSCATEGORY_TOPOLOGY = "{DDA54A40-1E4C-11D1-A050-405705C10000}"
 Proxy.CLSID         = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+; The EP\0 OEMFormat value in the Topo* sections is each endpoint's default
+; format: a VT_BLOB PROPVARIANT (type 0x41, 40 bytes) holding
+; WAVEFORMATEXTENSIBLE: PCM, 2 channels (front left/right), 48000 Hz,
+; 16 bits (the only depth Windows negotiates with the driver today).
+; Without it Windows defaults the virtual microphones to mono. Keep in
+; sync with the format EnsureStereo applies in setup/endpoints.cpp.
+PKEY_AudioEndpoint_Association = "{1DA5D803-D492-4EDD-8C23-E0C0FFEE7F0E},2"
+PKEY_AudioEngine_OEMFormat     = "{E4870E26-3CC5-4CD2-BA46-CA0A9A70ED04},3"
+KSNODETYPE_ANY                 = "{00000000-0000-0000-0000-000000000000}"
+REG_BINARY                     = 0x00000001
 
 KSNAME.WaveStream = "CfWaveStream"
 KSNAME.TopoStream = "CfTopoStream"
