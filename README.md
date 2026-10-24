@@ -173,6 +173,20 @@ $env:LIB = "C:\gtk\lib;$env:LIB"
 cargo build --release
 ```
 
+To build the installer (`GleemCrossfade-<version>-setup.exe`), which bundles
+the GTK runtime, the driver and the naming service, install
+[Inno Setup 6](https://jrsoftware.org/isinfo.php) and run:
+
+```powershell
+.\packaging\windows\build-installer.ps1
+```
+
+The installer puts Crossfade in `C:\Program Files\Gleem Crossfade`, sets up
+the driver, and adds a Start menu entry and an uninstaller under
+*Settings → Apps*. Uninstalling quits a running Crossfade and removes the
+driver, the naming service and the Start-at-login entry; your settings in
+`%LOCALAPPDATA%\gleem-crossfade` are kept.
+
 ### Upgrading from OpenWave
 
 Crossfade was previously published as **OpenWave**. Your configuration

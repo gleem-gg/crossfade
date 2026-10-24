@@ -50,3 +50,5 @@ windows = { version = "0.62.2", features = [
 
 [build-dependencies]
 glib-build-tools = "0.22"
+# Embeds the Windows icon and version info (only used for Windows targets).
+embed-resource = "3.0.12"

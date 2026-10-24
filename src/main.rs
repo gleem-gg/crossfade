@@ -45,15 +45,26 @@ fn main() -> glib::ExitCode {
         "Start with the window hidden (used by autostart)",
         None,
     );
+    app.add_main_option(
+        "quit",
+        glib::Char::from(0u8),
+        glib::OptionFlags::NONE,
+        glib::OptionArg::None,
+        "Quit the running instance, as its Quit menu item does (used by the installer)",
+        None,
+    );
     #[cfg(target_os = "linux")]
     add_effect_options(&app);
     let start_hidden = Rc::new(Cell::new(false));
     {
         let start_hidden = start_hidden.clone();
-        app.connect_handle_local_options(move |_, options| {
+        app.connect_handle_local_options(move |app, options| {
             #[cfg(target_os = "linux")]
             if let Some(code) = handle_effect_options(options) {
                 return std::ops::ControlFlow::Break(code);
+            }
+            if options.contains("quit") {
+                return std::ops::ControlFlow::Break(quit_running_instance(app));
             }
             if options.contains("hidden") {
                 start_hidden.set(true);
@@ -94,6 +105,24 @@ fn main() -> glib::ExitCode {
     });
     app.set_accels_for_action("app.quit", &["<primary>q"]);
     app.run()
+}
+
+/// `--quit`: ask the primary instance to run `app.quit` (save, unload the
+/// virtual devices, release per-app routes, exit). Without a running
+/// instance there is nothing to do.
+fn quit_running_instance(app: &adw::Application) -> glib::ExitCode {
+    if let Err(e) = app.register(None::<&gtk::gio::Cancellable>) {
+        eprintln!("gleem-crossfade: could not reach the running instance: {e}");
+        return glib::ExitCode::FAILURE;
+    }
+    if app.is_remote() {
+        app.activate_action("quit", None);
+        // The activation is sent asynchronously; deliver it before exiting.
+        if let Some(connection) = app.dbus_connection() {
+            let _ = connection.flush_sync(None::<&gtk::gio::Cancellable>);
+        }
+    }
+    glib::ExitCode::SUCCESS
 }
 
 #[cfg(target_os = "linux")]
