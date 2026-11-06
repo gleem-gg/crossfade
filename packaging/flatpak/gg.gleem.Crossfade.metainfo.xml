@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>gg.gleem.Crossfade</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Gleem Crossfade</name>
+  <summary>Dual-mix virtual audio mixer for PipeWire</summary>
+  <description>
+    <p>
+      Crossfade is a dual-mix virtual audio mixer for PipeWire featuring independent
+      Monitor, Stream, and VOD mixes per channel, virtual microphones for OBS and Discord,
+      and support for LV2/VST effects and MIDI controllers.
+    </p>
+  </description>
+  <launchable type="desktop-id">gg.gleem.Crossfade.desktop</launchable>
+  <url type="homepage">https://gleem.gg/crossfade</url>
+  <url type="vcs-browser">https://github.com/gleem-gg/crossfade</url>
+  <developer_name>Anikeen</developer_name>
+  <releases>
+    <release version="0.1.0" date="2026-01-01"/>
+  </releases>
+</component>
