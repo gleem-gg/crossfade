@@ -53,6 +53,11 @@ const INVALID_INDEX: u32 = u32::MAX;
 /// (startup deferral, hotplug hold): a stalled capture must never cost the
 /// user their monitor audio for good.
 const MONITOR_OUT_HOLD: Duration = Duration::from_secs(8);
+/// How long a re-appeared Elgato Wave capture device is left alone before
+/// its channel is wired: a capture stream opened within about a second of
+/// the device enumerating (observed after a firmware restart) gets no
+/// frames, while one opened a few seconds later runs.
+const WAVE_SETTLE: Duration = Duration::from_secs(3);
 
 pub fn channel_sink_name(id: u64) -> String {
     format!("{OWN_PREFIX}Ch{id}")
@@ -85,6 +90,27 @@ fn loopback_args(source: &str, sink: &str, tag: &str) -> String {
          sink_input_properties='media.name=\"{tag} out\" state.restore-props=false state.restore-target=false' \
          source_output_properties='media.name=\"{tag} in\" state.restore-props=false state.restore-target=false'"
     )
+}
+
+/// The listed device a configured name refers to: the exact name, else the
+/// name with the ".N" suffix WirePlumber appends when a device re-appears
+/// before its previous node is gone ("…analog-stereo" →
+/// "…analog-stereo.2"). WirePlumber keeps that suffix until it restarts.
+fn resolve_device<'a>(wanted: &str, names: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    let mut suffixed = None;
+    for name in names {
+        if name == wanted {
+            return Some(name);
+        }
+        let dedup = name
+            .strip_prefix(wanted)
+            .and_then(|rest| rest.strip_prefix('.'))
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()));
+        if dedup && suffixed.is_none() {
+            suffixed = Some(name);
+        }
+    }
+    suffixed
 }
 
 /// The card part of an ALSA device name, shared by a card's sinks and
@@ -172,6 +198,9 @@ struct ChannelRuntime {
     /// Configured capture source that is not on the server yet; the channel
     /// is wired as soon as it appears (USB devices enumerate late at login).
     pending_source: Option<String>,
+    /// When a parked Elgato Wave capture device was first seen again; it is
+    /// wired once it has been listed for WAVE_SETTLE.
+    source_seen: Option<Instant>,
     monitor_loop: Loopback,
     stream_loop: Loopback,
     vod_loop: Loopback,
@@ -246,6 +275,21 @@ struct Inner {
     monitor_out_hold_since: Option<Instant>,
     peaks: HashMap<LevelTarget, Rc<RefCell<Stream>>>,
     refresh_queued: bool,
+}
+
+impl Inner {
+    /// The listed sink a configured device name refers to (see
+    /// resolve_device).
+    fn sink_named(&self, wanted: &str) -> Option<&SinkEntry> {
+        let name = resolve_device(wanted, self.sinks.iter().map(|(_, e)| e.name.as_str()))?;
+        self.sinks.iter().map(|(_, e)| e).find(|e| e.name == name)
+    }
+
+    /// The listed capture device a configured name refers to.
+    fn source_named(&self, wanted: &str) -> Option<&SourceEntry> {
+        let name = resolve_device(wanted, self.sources.iter().map(|s| s.name.as_str()))?;
+        self.sources.iter().find(|s| s.name == name)
+    }
 }
 
 #[derive(Clone)]
@@ -1094,8 +1138,82 @@ impl PulseManager {
         });
     }
 
+    /// Unload the monitor-out loopback; finish_refresh recreates it.
+    fn unload_monitor_out(rc: &Rc<RefCell<Inner>>) {
+        let old = {
+            let mut inner = rc.borrow_mut();
+            inner.monitor_out_generation += 1;
+            let m = inner.monitor_out.module.take();
+            if let Some(m) = m {
+                inner.owned_modules.remove(&m);
+            }
+            inner.monitor_out.sink_input = None;
+            inner.monitor_out.source_output = None;
+            m
+        };
+        if let Some(m) = old
+            && let Some(mut intro) = Self::introspect(rc) {
+                let _ = intro.unload_module(m, |_| {});
+            }
+    }
+
+    /// Drop monitor-out when the device it plays on left the server. The
+    /// loopback outlives an unplug, and WirePlumber re-links its playback
+    /// the instant the device returns — together with the channel's
+    /// capture, which wedges a Wave's firmware. Recreating it instead runs
+    /// through monitor_out_held, which waits for capture first.
+    fn drop_orphaned_monitor_out(rc: &Rc<RefCell<Inner>>) {
+        let orphaned = {
+            let inner = rc.borrow();
+            inner.monitor_out.module.is_some()
+                && !inner.monitor_out.target.is_empty()
+                && !inner
+                    .sinks
+                    .iter()
+                    .any(|(_, e)| e.name == inner.monitor_out.target)
+        };
+        if orphaned {
+            Self::unload_monitor_out(rc);
+        }
+    }
+
+    /// Park `Source` channels whose capture device left the server, so
+    /// check_pending_sources wires them afresh when it returns. Left alone,
+    /// their loopbacks would be re-linked by WirePlumber the instant the
+    /// device re-appears — too early for a Wave's firmware (see
+    /// WAVE_SETTLE) and racing the monitor-out playback.
+    fn park_vanished_sources(rc: &Rc<RefCell<Inner>>) {
+        let ids: Vec<u64> = {
+            let inner = rc.borrow();
+            if !inner.ready || inner.shutting_down {
+                return;
+            }
+            let cfg = inner.config.borrow();
+            cfg.channels
+                .iter()
+                .filter(|c| {
+                    let Some(Assignment::Source { name }) = &c.assignment else {
+                        return false;
+                    };
+                    inner
+                        .channels
+                        .get(&c.id)
+                        .is_some_and(|rt| rt.pending_source.is_none())
+                        && inner.source_named(name).is_none()
+                })
+                .map(|c| c.id)
+                .collect()
+        };
+        for id in ids {
+            // Finds the device absent and parks the channel.
+            Self::rebuild_channel_inner(rc, id);
+        }
+    }
+
     /// Reconciliation pass run once a refresh cycle has landed all lists.
     fn finish_refresh(rc: &Rc<RefCell<Inner>>) {
+        Self::drop_orphaned_monitor_out(rc);
+        Self::park_vanished_sources(rc);
         Self::check_pending_sources(rc);
         Self::match_pending_loopbacks(rc);
         Self::reconcile_apps(rc);
@@ -1112,8 +1230,9 @@ impl PulseManager {
             let retarget = || {
                 let cfg = inner.config.borrow();
                 cfg.master.monitor_device.as_ref().is_some_and(|d| {
-                    *d != inner.monitor_out.target
-                        && inner.sinks.iter().any(|(_, e)| &e.name == d)
+                    inner
+                        .sink_named(d)
+                        .is_some_and(|e| e.name != inner.monitor_out.target)
                 })
             };
             usable && (inner.monitor_out.module.is_none() || retarget())
@@ -1162,7 +1281,7 @@ impl PulseManager {
     fn monitor_out_target(inner: &Inner) -> Option<String> {
         let configured = inner.config.borrow().master.monitor_device.clone();
         configured
-            .filter(|d| inner.sinks.iter().any(|(_, e)| &e.name == d))
+            .and_then(|d| inner.sink_named(&d).map(|e| e.name.clone()))
             .or_else(|| {
                 inner
                     .default_sink
@@ -1198,6 +1317,10 @@ impl PulseManager {
             let Some(Assignment::Source { name }) = &c.assignment else {
                 return false;
             };
+            // The device as listed (it may carry a ".N" dedup suffix).
+            let name = inner
+                .source_named(name)
+                .map_or(name.as_str(), |s| s.name.as_str());
             if !Self::same_card(inner, sink, name) {
                 return false;
             }
@@ -1208,7 +1331,7 @@ impl PulseManager {
                         .any(|l| {
                             // Attached to the device itself, not merely
                             // created (WirePlumber may have moved it away).
-                            &l.source_target == name
+                            l.source_target == name
                                 && l.sink_input.is_some()
                                 && l
                                     .source_output
@@ -1217,7 +1340,7 @@ impl PulseManager {
                                         inner
                                             .sources
                                             .iter()
-                                            .any(|s| s.index == e.source && &s.name == name)
+                                            .any(|s| s.index == e.source && s.name == name)
                                     })
                         })
             });
@@ -1245,20 +1368,32 @@ impl PulseManager {
     /// the monitor output plays (or is configured to play) on the same card,
     /// tear it down first and let the deferral logic recreate it once the
     /// capture loopbacks run: the Wave's firmware delivers a silent mic
-    /// when its playback stream is opened before its capture stream.
+    /// when its playback stream is opened before its capture stream. An
+    /// Elgato Wave is only wired once it has been listed for WAVE_SETTLE.
     fn check_pending_sources(rc: &Rc<RefCell<Inner>>) {
-        let (ready_ids, bounce) = {
+        let (ready_ids, bounce, first_seen) = {
             let inner = rc.borrow();
             if !inner.ready || inner.shutting_down {
                 return;
             }
             let mut ids = Vec::new();
+            let mut first_seen = Vec::new();
             let mut cards = Vec::new();
             for (&id, rt) in &inner.channels {
                 let Some(p) = &rt.pending_source else {
                     continue;
                 };
-                if let Some(s) = inner.sources.iter().find(|s| &s.name == p) {
+                if let Some(s) = inner.source_named(p) {
+                    if is_elgato_wave(&s.name, &s.description) {
+                        match rt.source_seen {
+                            None => {
+                                first_seen.push(id);
+                                continue;
+                            }
+                            Some(seen) if seen.elapsed() < WAVE_SETTLE => continue,
+                            Some(_) => {}
+                        }
+                    }
                     ids.push(id);
                     if s.card.is_some() {
                         cards.push(s.card);
@@ -1272,37 +1407,36 @@ impl PulseManager {
                     .iter()
                     .flatten()
                     .any(|t| {
-                        let tc = inner
-                            .sinks
-                            .iter()
-                            .find(|(_, e)| &e.name == t)
-                            .and_then(|(_, e)| e.card);
+                        let tc = inner.sink_named(t).and_then(|e| e.card);
                         tc.is_some() && cards.contains(&tc)
                     })
             };
-            (ids, bounce)
+            (ids, bounce, first_seen)
         };
+        if !first_seen.is_empty() {
+            {
+                let mut inner = rc.borrow_mut();
+                let now = Instant::now();
+                for id in &first_seen {
+                    if let Some(rt) = inner.channels.get_mut(id) {
+                        rt.source_seen = Some(now);
+                    }
+                }
+            }
+            let weak = Rc::downgrade(rc);
+            glib::timeout_add_local_once(WAVE_SETTLE, move || {
+                if let Some(rc) = weak.upgrade() {
+                    Self::schedule_refresh(&rc);
+                }
+            });
+        }
         if ready_ids.is_empty() {
             return;
         }
         if bounce {
-            let old = {
-                let mut inner = rc.borrow_mut();
-                inner.monitor_out_generation += 1;
-                inner.monitor_out_deferred = true;
-                let m = inner.monitor_out.module.take();
-                if let Some(m) = m {
-                    inner.owned_modules.remove(&m);
-                }
-                inner.monitor_out.sink_input = None;
-                inner.monitor_out.source_output = None;
-                m
-            };
+            rc.borrow_mut().monitor_out_deferred = true;
             Self::monitor_out_defer_timeout(rc);
-            if let Some(m) = old
-                && let Some(mut intro) = Self::introspect(rc) {
-                    let _ = intro.unload_module(m, |_| {});
-                }
+            Self::unload_monitor_out(rc);
         }
         for id in ready_ids {
             Self::rebuild_channel_inner(rc, id);
@@ -1663,6 +1797,7 @@ impl PulseManager {
             let generation_id = rt.generation;
             rt.pending_wire = None;
             rt.pending_source = None;
+            rt.source_seen = None;
             let mut to_unload = Vec::new();
             for l in [
                 &mut rt.monitor_loop,
@@ -1720,9 +1855,9 @@ impl PulseManager {
                 inner.fx.kill_vst(id);
             }
             Some(Assignment::Source { name }) => {
-                let present = rc.borrow().sources.iter().any(|s| s.name == name);
-                if present {
-                    Self::wire_channel_input(rc, id, generation_id, &name);
+                let present = rc.borrow().source_named(&name).map(|s| s.name.clone());
+                if let Some(actual) = present {
+                    Self::wire_channel_input(rc, id, generation_id, &actual);
                 } else {
                     // Not on the server (yet): USB mics can enumerate
                     // seconds after login. Park the channel;
@@ -2479,7 +2614,21 @@ impl PulseManager {
 
 #[cfg(test)]
 mod tests {
-    use super::device_stem;
+    use super::{device_stem, resolve_device};
+
+    #[test]
+    fn resolve_device_accepts_wireplumbers_dedup_suffix() {
+        let out = "alsa_output.usb-Elgato_Systems_Elgato_Wave_XLR_DS30M2A03783-00.analog-stereo";
+        let dup = "alsa_output.usb-Elgato_Systems_Elgato_Wave_XLR_DS30M2A03783-00.analog-stereo.2";
+        assert_eq!(resolve_device(out, [dup]), Some(dup));
+        // The exact name wins over a suffixed one, whatever the order.
+        assert_eq!(resolve_device(out, [dup, out]), Some(out));
+        // Only a pure numeric suffix counts.
+        assert_eq!(resolve_device(out, [format!("{out}-x").as_str()]), None);
+        assert_eq!(resolve_device(out, [format!("{out}.").as_str()]), None);
+        assert_eq!(resolve_device(out, [format!("{out}.monitor").as_str()]), None);
+        assert_eq!(resolve_device(out, ["Crossfade_Monitor"]), None);
+    }
 
     #[test]
     fn device_stem_pairs_a_cards_sinks_and_sources() {
