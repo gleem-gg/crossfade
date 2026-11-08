@@ -17,6 +17,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use gtk::glib;
 use libpulse_binding as pulse;
@@ -48,6 +49,10 @@ const OWN_PREFIX: &str = "Crossfade_";
 const LEGACY_PREFIX: &str = "OpenWave_";
 const LOOPBACK_ARGS: &str = "latency_msec=30";
 const INVALID_INDEX: u32 = u32::MAX;
+/// Longest monitor-out playback is held back for capture on the same card
+/// (startup deferral, hotplug hold): a stalled capture must never cost the
+/// user their monitor audio for good.
+const MONITOR_OUT_HOLD: Duration = Duration::from_secs(8);
 
 pub fn channel_sink_name(id: u64) -> String {
     format!("{OWN_PREFIX}Ch{id}")
@@ -80,6 +85,17 @@ fn loopback_args(source: &str, sink: &str, tag: &str) -> String {
          sink_input_properties='media.name=\"{tag} out\" state.restore-props=false state.restore-target=false' \
          source_output_properties='media.name=\"{tag} in\" state.restore-props=false state.restore-target=false'"
     )
+}
+
+/// The card part of an ALSA device name, shared by a card's sinks and
+/// sources: "alsa_output.usb-Elgato_…-00.analog-stereo" and
+/// "alsa_input.usb-Elgato_…-00.mono-fallback" both yield "usb-Elgato_…-00".
+/// Lets same-card checks work before the other side is on the server.
+fn device_stem(name: &str) -> Option<&str> {
+    name.strip_prefix("alsa_output.")
+        .or_else(|| name.strip_prefix("alsa_input."))?
+        .rsplit_once('.')
+        .map(|(stem, _)| stem)
 }
 
 /// Addresses one managed loopback, for the fast post-load volume apply.
@@ -223,6 +239,11 @@ struct Inner {
     /// stream is opened before its capture stream, so capture must come up
     /// first; see check_pending_sources / source_channels_settled.
     monitor_out_deferred: bool,
+    /// When monitor-out creation was first held back because a capture
+    /// device on the target's card is not capturing yet (a Wave plugged in
+    /// while Crossfade runs); see monitor_out_held. Reset whenever
+    /// monitor-out is (re)created.
+    monitor_out_hold_since: Option<Instant>,
     peaks: HashMap<LevelTarget, Rc<RefCell<Stream>>>,
     refresh_queued: bool,
 }
@@ -897,7 +918,7 @@ impl PulseManager {
     /// deferral early, which merely restores today's playback-first order.
     fn monitor_out_defer_timeout(rc: &Rc<RefCell<Inner>>) {
         let weak = Rc::downgrade(rc);
-        glib::timeout_add_local_once(std::time::Duration::from_secs(8), move || {
+        glib::timeout_add_local_once(MONITOR_OUT_HOLD, move || {
             let Some(rc) = weak.upgrade() else {
                 return;
             };
@@ -1097,10 +1118,111 @@ impl PulseManager {
             };
             usable && (inner.monitor_out.module.is_none() || retarget())
         };
-        if action {
+        if action && !Self::monitor_out_held(rc) {
             Self::setup_monitor_output_inner(rc);
         }
         Self::emit(rc, AudioEvent::DevicesChanged);
+    }
+
+    /// Hold monitor-out back while a capture device on its target's card is
+    /// not capturing yet — parked because only the card's playback side is
+    /// listed so far, or still being wired (e.g. waiting for the channel's
+    /// VST rack). The startup deferral and check_pending_sources' bounce only
+    /// cover monitor-out being torn down; this also covers creating it for
+    /// the first time, which is what happens when a Wave is plugged in while
+    /// Crossfade runs and wedges its firmware if playback opens first.
+    /// Gives up after MONITOR_OUT_HOLD.
+    fn monitor_out_held(rc: &Rc<RefCell<Inner>>) -> bool {
+        let (held, arm) = {
+            let mut inner = rc.borrow_mut();
+            let blocked = Self::monitor_out_target(&inner)
+                .is_some_and(|t| Self::capture_pending_on_card(&inner, &t));
+            match (blocked, inner.monitor_out_hold_since) {
+                (false, _) => (false, false),
+                (true, None) => {
+                    inner.monitor_out_hold_since = Some(Instant::now());
+                    (true, true)
+                }
+                (true, Some(since)) => (since.elapsed() < MONITOR_OUT_HOLD, false),
+            }
+        };
+        if arm {
+            let weak = Rc::downgrade(rc);
+            glib::timeout_add_local_once(MONITOR_OUT_HOLD, move || {
+                if let Some(rc) = weak.upgrade() {
+                    Self::schedule_refresh(&rc);
+                }
+            });
+        }
+        held
+    }
+
+    /// Sink monitor-out plays on: the configured device when present, else
+    /// the default sink unless that is one of our own.
+    fn monitor_out_target(inner: &Inner) -> Option<String> {
+        let configured = inner.config.borrow().master.monitor_device.clone();
+        configured
+            .filter(|d| inner.sinks.iter().any(|(_, e)| &e.name == d))
+            .or_else(|| {
+                inner
+                    .default_sink
+                    .clone()
+                    .filter(|d| !d.starts_with(OWN_PREFIX))
+            })
+    }
+
+    /// Whether `sink` and `source` belong to the same sound card: by card
+    /// index when both are listed, else by ALSA device name.
+    fn same_card(inner: &Inner, sink: &str, source: &str) -> bool {
+        let sink_card = inner
+            .sinks
+            .iter()
+            .find(|(_, e)| e.name == sink)
+            .and_then(|(_, e)| e.card);
+        let source_card = inner
+            .sources
+            .iter()
+            .find(|s| s.name == source)
+            .and_then(|s| s.card);
+        match (sink_card, source_card) {
+            (Some(a), Some(b)) => a == b,
+            _ => device_stem(sink).is_some_and(|s| device_stem(source) == Some(s)),
+        }
+    }
+
+    /// Some `Source` channel captures from the same card as `sink` but has
+    /// no running capture loopback on that device yet.
+    fn capture_pending_on_card(inner: &Inner, sink: &str) -> bool {
+        let cfg = inner.config.borrow();
+        cfg.channels.iter().any(|c| {
+            let Some(Assignment::Source { name }) = &c.assignment else {
+                return false;
+            };
+            if !Self::same_card(inner, sink, name) {
+                return false;
+            }
+            let capturing = inner.channels.get(&c.id).is_some_and(|rt| {
+                rt.pending_source.is_none()
+                    && [&rt.monitor_loop, &rt.stream_loop, &rt.vod_loop, &rt.input_loop]
+                        .iter()
+                        .any(|l| {
+                            // Attached to the device itself, not merely
+                            // created (WirePlumber may have moved it away).
+                            &l.source_target == name
+                                && l.sink_input.is_some()
+                                && l
+                                    .source_output
+                                    .and_then(|so| inner.source_outputs.get(&so))
+                                    .is_some_and(|e| {
+                                        inner
+                                            .sources
+                                            .iter()
+                                            .any(|s| s.index == e.source && &s.name == name)
+                                    })
+                        })
+            });
+            !capturing
+        })
     }
 
     /// Every `Source` channel either has its capture loopback running or is
@@ -1277,15 +1399,38 @@ impl PulseManager {
                 applies.push((None, Mix::Monitor));
             }
         }
+        // Capture first: a playback stream moved back onto a card whose
+        // capture stream is being moved back in the same pass (a re-plugged
+        // Wave) waits for the next refresh, which re-detects the drift once
+        // capture is attached again.
+        let held_sinks = {
+            let inner = rc.borrow();
+            let before = moves.sinks.len();
+            moves.sinks.retain(|(_, sink)| {
+                !moves
+                    .sources
+                    .iter()
+                    .any(|(_, source)| Self::same_card(&inner, sink, source))
+            });
+            moves.sinks.len() != before
+        };
         if (!moves.sinks.is_empty() || !moves.sources.is_empty())
             && let Some(mut intro) = Self::introspect(rc) {
-                for (si, sink) in moves.sinks {
-                    let _ = intro.move_sink_input_by_name(si, &sink, None);
-                }
                 for (so, source) in moves.sources {
                     let _ = intro.move_source_output_by_name(so, &source, None);
                 }
+                for (si, sink) in moves.sinks {
+                    let _ = intro.move_sink_input_by_name(si, &sink, None);
+                }
             }
+        if held_sinks {
+            let weak = Rc::downgrade(rc);
+            glib::timeout_add_local_once(Duration::from_millis(500), move || {
+                if let Some(rc) = weak.upgrade() {
+                    Self::schedule_refresh(&rc);
+                }
+            });
+        }
         for (id, mix) in applies {
             match id {
                 Some(id) => Self::apply_channel_mix_inner(rc, id, mix),
@@ -1993,21 +2138,14 @@ impl PulseManager {
             inner.monitor_out_generation += 1;
             inner.monitor_out_pending = false;
             inner.monitor_out_deferred = false;
+            inner.monitor_out_hold_since = None;
             let old = inner.monitor_out.module.take();
             if let Some(m) = old {
                 inner.owned_modules.remove(&m);
             }
             inner.monitor_out.sink_input = None;
             inner.monitor_out.source_output = None;
-            let configured = inner.config.borrow().master.monitor_device.clone();
-            let target = configured
-                .filter(|d| inner.sinks.iter().any(|(_, e)| &e.name == d))
-                .or_else(|| {
-                    inner
-                        .default_sink
-                        .clone()
-                        .filter(|d| !d.starts_with(OWN_PREFIX))
-                });
+            let target = Self::monitor_out_target(&inner);
             (inner.monitor_out_generation, old, target)
         };
         let Some(mut intro) = Self::introspect(rc) else {
@@ -2336,5 +2474,29 @@ impl PulseManager {
         if ok {
             rc.borrow_mut().peaks.insert(target, stream);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::device_stem;
+
+    #[test]
+    fn device_stem_pairs_a_cards_sinks_and_sources() {
+        let out = "alsa_output.usb-Elgato_Systems_Elgato_Wave_XLR_DS30M2A03783-00.analog-stereo";
+        let mic = "alsa_input.usb-Elgato_Systems_Elgato_Wave_XLR_DS30M2A03783-00.mono-fallback";
+        assert_eq!(device_stem(out), Some("usb-Elgato_Systems_Elgato_Wave_XLR_DS30M2A03783-00"));
+        assert_eq!(device_stem(out), device_stem(mic));
+        // Dots inside the card part (PCI addresses) stay with the stem.
+        assert_eq!(
+            device_stem("alsa_input.pci-0000_0b_00.4.analog-stereo"),
+            Some("pci-0000_0b_00.4")
+        );
+        assert_ne!(
+            device_stem("alsa_output.pci-0000_0b_00.4.iec958-stereo"),
+            device_stem(mic)
+        );
+        assert_eq!(device_stem("Crossfade_Monitor"), None);
+        assert_eq!(device_stem("bluez_output.AA_BB.1"), None);
     }
 }
