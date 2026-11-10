@@ -1,6 +1,6 @@
 app-id: gg.gleem.Crossfade
 runtime: org.gnome.Platform
-runtime-version: '49'
+runtime-version: '51'
 sdk: org.gnome.Sdk
 sdk-extensions:
   - org.freedesktop.Sdk.Extension.rust-stable
@@ -17,6 +17,9 @@ finish-args:
   - --filesystem=xdg-run/pipewire-0
   # D-Bus
   - --own-name=gg.gleem.Crossfade
+  # Tray icon (StatusNotifierItem)
+  - --talk-name=org.kde.StatusNotifierWatcher
+  - --own-name=org.kde.StatusNotifierItem-2-1
   # Hardware access (ALSA / MIDI / Stream Deck controllers)
   - --device=all
   # Plugin discovery
