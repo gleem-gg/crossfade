@@ -2,3 +2,4 @@
 /.idea
 /driver/build
 /packaging/windows/build
+/flatpak-cargo-generator.py
