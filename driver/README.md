@@ -29,7 +29,7 @@ The package — `CrossfadeAudio.sys`, `.inf`, `.cat`, `crossfade-driver-setup.ex
 and the test certificate `CrossfadeAudio.cer` — lands in
 `driver\build\<Platform>\<Configuration>\CrossfadeAudio\`.
 
-Every build stamps a distinct `DriverVer` (`0.9.<yyMM>.<minute of the
+Every build stamps a distinct `DriverVer` (`0.10.<yyMM>.<minute of the
 month>`, UTC). Windows' driver store identifies a package by its INF, so
 reinstalling a rebuild with an identical INF reports success but keeps the
 old binary running.

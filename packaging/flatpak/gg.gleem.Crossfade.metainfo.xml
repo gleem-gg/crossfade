@@ -42,7 +42,7 @@
 
   <screenshots>
     <screenshot type="default">
-      <image>https://raw.githubusercontent.com/gleem-gg/crossfade/v0.9.0/img.png</image>
+      <image>https://raw.githubusercontent.com/gleem-gg/crossfade/v0.10.0/img.png</image>
       <caption>The mixer with Monitor and Stream faders per channel</caption>
     </screenshot>
   </screenshots>
@@ -55,6 +55,16 @@
   <content_rating type="oars-1.1"/>
 
   <releases>
+    <release version="0.10.0" date="2026-11-11">
+      <url type="details">https://github.com/gleem-gg/crossfade/releases/tag/v0.10.0</url>
+      <description>
+        <ul>
+          <li>The setup assistant checks the routing of every Elgato Wave interface, not only the Wave XLR</li>
+          <li>Crossfade now also runs on Windows, as a preview</li>
+          <li>Relicensed under the Apache License 2.0</li>
+        </ul>
+      </description>
+    </release>
     <release version="0.9.0" date="2026-08-07">
       <url type="details">https://github.com/gleem-gg/crossfade/releases/tag/v0.9.0</url>
       <description>

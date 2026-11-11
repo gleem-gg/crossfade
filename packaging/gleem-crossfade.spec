@@ -1,5 +1,5 @@
 Name:           gleem-crossfade
-Version:        0.9.0
+Version:        0.10.0
 Release:        1%{?dist}
 Summary:        Dual-mix virtual audio mixer for PipeWire
 License:        Apache-2.0
@@ -76,6 +76,13 @@ desktop-file-validate %{buildroot}%{_datadir}/applications/gg.gleem.Crossfade.de
 %{_datadir}/icons/hicolor/scalable/apps/gg.gleem.Crossfade.svg
 
 %changelog
+* Wed Nov 11 2026 René Preuß <hello@ghostzero.de> - 0.10.0-1
+- The setup assistant checks the routing of every Elgato Wave interface
+  (Wave:1, Wave:3, Wave Neo), not only the Wave XLR
+- Windows preview: WASAPI backend with Crossfade's own virtual audio
+  driver and an installer
+- Relicensed from MIT to the Apache License 2.0
+
 * Fri Aug 07 2026 René Preuß <hello@ghostzero.de> - 0.9.0-1
 - Application channels can capture several apps at once, by name or by
   pattern (e.g. Firefox*), and are selectable output devices at the same time

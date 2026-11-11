@@ -10,7 +10,7 @@ Signature   = "$Windows NT$"
 Class       = MEDIA
 ClassGuid   = {4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider    = %ProviderName%
-DriverVer   = 01/01/2026,0.9.0.0
+DriverVer   = 01/01/2026,0.10.0.0
 CatalogFile = CrossfadeAudio.cat
 PnpLockdown = 1
 
