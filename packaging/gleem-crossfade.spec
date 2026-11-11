@@ -3,8 +3,8 @@ Version:        0.10.0
 Release:        1%{?dist}
 Summary:        Dual-mix virtual audio mixer for PipeWire
 License:        Apache-2.0
-URL:            https://github.com/gleem-gg/crossfade
-Source0:        %{url}/archive/v%{version}/%{name}-%{version}.tar.gz
+URL:            https://gleem.gg/crossfade
+Source0:        https://github.com/gleem-gg/crossfade/archive/v%{version}/%{name}-%{version}.tar.gz
 # Created with `cargo vendor` (see .copr/Makefile in the repository)
 Source1:        %{name}-%{version}-vendor.tar.xz
 
